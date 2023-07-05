@@ -1,8 +1,8 @@
-train_file: ["path/to/image_text_pair/data"]
+train_file: ["../dataSet/cc3m/cc3m_filtered.json"]
 c4_train_file: ["path/to/c4/data"]
 
-image_name: "binary"
-caption_name: "desc"
+image_name: "image"
+caption_name: "caption"
 train_file_tokenized: false
 train_dataset_size: 1335283
 checkpoint_frequent: 10000
