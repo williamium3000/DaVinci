@@ -7,7 +7,7 @@ import datetime
 
 import torch
 import torch.distributed as dist
-
+import subprocess
 
 class SmoothedValue(object):
     """Track a series of values and provide access to smoothed values over a
@@ -246,14 +246,32 @@ def save_on_master(*args, **kwargs):
         torch.save(*args, **kwargs)
 
 
+
 def init_distributed_mode(args):
     if 'RANK' in os.environ and 'WORLD_SIZE' in os.environ:
         args.rank = int(os.environ["RANK"])
         args.world_size = int(os.environ['WORLD_SIZE'])
-        args.gpu = int(os.environ['LOCAL_RANK'])
+        if hasattr(args, "local_rank") and args.local_rank is not None:
+            args.gpu = args.local_rank
+        else:
+            args.gpu = int(os.environ['LOCAL_RANK'])
     elif 'SLURM_PROCID' in os.environ:
-        args.rank = int(os.environ['SLURM_PROCID'])
+        print("Using SLURM!")
+        args.rank = int(os.environ["SLURM_PROCID"])
         args.gpu = args.rank % torch.cuda.device_count()
+        args.world_size = int(os.environ["SLURM_NTASKS"])
+        node_list = os.environ["SLURM_NODELIST"]
+        addr = subprocess.getoutput(f"scontrol show hostname {node_list} | head -n1")
+        # specify master port
+        if "MASTER_PORT" not in os.environ:
+            os.environ["MASTER_PORT"] = "30685"
+            
+        if "MASTER_ADDR" not in os.environ:
+            os.environ["MASTER_ADDR"] = addr
+            
+        os.environ["WORLD_SIZE"] = str(args.world_size)
+        os.environ["LOCAL_RANK"] = str(args.gpu)
+        os.environ["RANK"] = str(args.rank)
     else:
         print('Not using distributed mode')
         args.distributed = False
