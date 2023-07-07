@@ -6,6 +6,7 @@ import warnings
 import random
 from itertools import cycle
 import torch
+import json
 from torch.utils.data import IterableDataset
 
 from util.hdfs_io import hopen, hlist_files
@@ -65,14 +66,10 @@ class DistLineReadingDataset(IterableDataset):  # pylint: disable=W0223
             if self.shuffle:
                 random.shuffle(cur_worker_files)
             for filepath in cur_worker_files:
-                if self.is_hdfs:
-                    with hopen(filepath, 'r') as reader:
-                        for line in reader:
-                            yield line.decode()
-                    continue
                 with open(filepath, 'r') as reader:
-                    for line in reader:
-                        yield line
+                    data = json.load(reader)
+                    for sample in data:
+                        yield sample
 
             if not self.repeat:
                 break

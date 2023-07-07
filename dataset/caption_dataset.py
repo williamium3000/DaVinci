@@ -107,7 +107,8 @@ class pretrain_dataset(DistLineReadingDataset):
     def __iter__(self):
         for example in self.generate():
             try:
-                ann = json.loads(example)
+                # ann = json.loads(example)
+                ann = example
                 res = {}
 
                 if self.config['caption_name'] in ann:
