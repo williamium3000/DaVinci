@@ -7,9 +7,8 @@ import random
 from itertools import cycle
 import torch
 import json
+import os
 from torch.utils.data import IterableDataset
-
-from util.hdfs_io import hopen, hlist_files
 
 
 class DistLineReadingDataset(IterableDataset):  # pylint: disable=W0223
@@ -18,7 +17,7 @@ class DistLineReadingDataset(IterableDataset):  # pylint: disable=W0223
     """
 
     def __init__(self,
-                 data_path: str,
+                 data_path: tuple(str, str),
                  rank: int = 0,
                  world_size: int = 1,
                  shuffle: bool = False,
@@ -27,10 +26,16 @@ class DistLineReadingDataset(IterableDataset):  # pylint: disable=W0223
         self.shuffle = shuffle
         self.rank = rank
         self.world_size = world_size
-
-        self.files = hlist_files(data_path.split(','))
-        self.files = [f for f in self.files if f.find('_SUCCESS') < 0]
-        self.is_hdfs = data_path.startswith('hdfs')
+        self.files = []
+        for t in data_path:
+            folder = t[0] # t[1] is image root
+            if os.path.isdir(folder):
+                self.files.extend([(os.path.join(folder, d), t[1]) for d in os.listdir(folder)])
+            elif os.path.isfile(folder):
+                self.files.append((folder, t[1]))
+            else:
+                print('Path {} is invalid'.format(folder))
+                sys.stdout.flush()
 
         self.repeat = repeat
         print('[DATA]--all dataset containing {} files.'.format(len(self.files)))
@@ -65,11 +70,11 @@ class DistLineReadingDataset(IterableDataset):  # pylint: disable=W0223
 
             if self.shuffle:
                 random.shuffle(cur_worker_files)
-            for filepath in cur_worker_files:
+            for filepath, img_root in cur_worker_files:
                 with open(filepath, 'r') as reader:
                     data = json.load(reader)
                     for sample in data:
-                        yield sample
+                        yield sample, img_root
 
             if not self.repeat:
                 break

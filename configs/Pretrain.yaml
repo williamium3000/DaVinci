@@ -1,4 +1,6 @@
-train_file: ["shard_jsons/vg/train", "shard_jsons/coco14/train"]
+train_file: [
+  ["shard_jsons/vg/train", '../dataSet/vg'], 
+  ["shard_jsons/coco14/train", '../dataSet/coco14/images']]
 # c4_train_file: ["path/to/c4/data"]
 
 image_name: "image"

@@ -105,7 +105,7 @@ class pretrain_dataset(DistLineReadingDataset):
     #     return len(self.ann)
 
     def __iter__(self):
-        for example in self.generate():
+        for example, img_root in self.generate():
             try:
                 # ann = json.loads(example)
                 ann = example
@@ -122,7 +122,7 @@ class pretrain_dataset(DistLineReadingDataset):
                 image_str = ann[self.config['image_name']]
 
                 try:
-                    image = Image.open(image_str).convert("RGB")
+                    image = Image.open(os.path.join(img_root, image_str)).convert("RGB")
                 except Exception as e:
                     print("ERROR: encounter broken data, image reading error", e)
                     # print("ann = ", ann)
