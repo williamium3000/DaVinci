@@ -49,4 +49,4 @@ discrete_vae_type: "vqgan"
 
 optimizer: {opt: adamW, lr: 2e-4, weight_decay: 0.01}
 schedular: {sched: linear, last_epoch: -1, epochs: 40, warmup_epochs: 1}
-accelerator: {SYNCBN: false, FP16_OPT_LEVEL: O1, FP16_LOSS_SCALE: dynamic, RNG_SEED: 42, GRAD_ACCUMULATE_STEPS: 1, CLIP_GRAD_NORM: 1.0}
+accelerator: {SYNCBN: false, fp16: true, GRAD_ACCUMULATE_STEPS: 1, CLIP_GRAD_NORM: 1.0}

@@ -42,7 +42,7 @@ sys.path.insert(0, str(model_dir))
 
 MAX_TOKENS = 30
 
-def train(args, model, pair_data_loader, c4_data_loader, optimizer, epoch_info, device, scheduler, config, scalar, tokenizer):
+def train(args, model, pair_data_loader, optimizer, epoch_info, device, scheduler, config, scalar, tokenizer):
     model.train()  
     start_epoch, _ = epoch_info
     metric_logger = utils.MetricLogger(delimiter="  ")
@@ -64,7 +64,7 @@ def train(args, model, pair_data_loader, c4_data_loader, optimizer, epoch_info, 
     current_step = start_epoch * step_per_epoch
     global_step = current_step + 1
 
-    for i, ((image, visual_token_image, org_texts), (null_image, c4_texts)) in enumerate(metric_logger.log_every(zip(pair_data_loader, c4_data_loader), print_freq, header, step_per_epoch, epoch_info)):
+    for i, ((image, visual_token_image, org_texts)) in enumerate(metric_logger.log_every(pair_data_loader, print_freq, header, step_per_epoch, epoch_info)):
         current_epoch = int(global_step/step_per_epoch)
         with autocast(enabled=scalar is not None):
         # -----------image-text-pair-------------
@@ -103,19 +103,19 @@ def train(args, model, pair_data_loader, c4_data_loader, optimizer, epoch_info, 
 
             loss_pair, loss_image_generation, loss_mim, logits = model(image, text_input, text_target, text_full=text_full, prefix_image=prefix_image, suffix_image=suffix_image, use_dalle=True, train=True, decode=False)   
             
-            # -----------c4-text-only-------------
-            pre_texts, gen_texts = [], []
-            for text in c4_texts:
-                wds = text.split(" ")
-                pre_len = min(np.random.randint(0, len(wds)), config['enc_max_words'])
-                pre_texts.append(" ".join(wds[:pre_len]))
-                gen_texts.append(" ".join(wds[pre_len:]))
+            # # -----------c4-text-only-------------
+            # pre_texts, gen_texts = [], []
+            # for text in c4_texts:
+            #     wds = text.split(" ")
+            #     pre_len = min(np.random.randint(0, len(wds)), config['enc_max_words'])
+            #     pre_texts.append(" ".join(wds[:pre_len]))
+            #     gen_texts.append(" ".join(wds[pre_len:]))
                 
-            text_input = tokenizer(pre_texts, padding='longest', truncation=True, max_length=config['enc_max_tokens'], return_tensors="pt").to(device)
-            text_target = tokenizer(gen_texts, padding='longest', truncation=True, max_length=config['dec_max_tokens'], return_tensors="pt").to(device)
-            loss_c4, logits = model(None, text_input, text_target, train=True, decode=False)   
+            # text_input = tokenizer(pre_texts, padding='longest', truncation=True, max_length=config['enc_max_tokens'], return_tensors="pt").to(device)
+            # text_target = tokenizer(gen_texts, padding='longest', truncation=True, max_length=config['dec_max_tokens'], return_tensors="pt").to(device)
+            # loss_c4, logits = model(None, text_input, text_target, train=True, decode=False)   
             
-            loss = config['loss_pair_alpha'] * loss_pair + config['loss_image_generation_alpha'] * loss_image_generation + config['c4_alpha'] * loss_c4 + config['loss_mim_alpha'] * loss_mim
+            loss = config['loss_pair_alpha'] * loss_pair + config['loss_image_generation_alpha'] * loss_image_generation + config['loss_mim_alpha'] * loss_mim
         
             if accelerator_gradient_accumulate_steps > 1:
                 loss = loss / accelerator_gradient_accumulate_steps
@@ -146,7 +146,7 @@ def train(args, model, pair_data_loader, c4_data_loader, optimizer, epoch_info, 
         metric_logger.update(loss=loss.item())
         metric_logger.update(loss_pair=loss_pair.item())
         metric_logger.update(loss_image_generation=loss_image_generation.item())
-        metric_logger.update(loss_c4=loss_c4.item())
+        # metric_logger.update(loss_c4=loss_c4.item())
         metric_logger.update(loss_mim=loss_mim.item())
         metric_logger.update(lr=optimizer.param_groups[0]["lr"])         
         
@@ -219,12 +219,12 @@ def main(args, config):
                                                collate_fn=pair_dataset.collate_fn
                                               )
     
-    c4_data_loader = torch.utils.data.DataLoader(c4_dataset, batch_size=config['batch_size_c4'],
-                                               num_workers=4,
-                                               pin_memory=True,
-                                               drop_last=False,
-                                               collate_fn=c4_dataset.collate_fn
-                                              )
+    # c4_data_loader = torch.utils.data.DataLoader(c4_dataset, batch_size=config['batch_size_c4'],
+    #                                            num_workers=4,
+    #                                            pin_memory=True,
+    #                                            drop_last=False,
+    #                                            collate_fn=c4_dataset.collate_fn
+    #                                           )
 
     tokenizer = BertTokenizer.from_pretrained(args.encoder, bos_token='[CLS]', eos_token='[SEP]', add_single_sep=False)
 
@@ -278,7 +278,7 @@ def main(args, config):
     start_time = time.time()
     epoch_info = (start_epoch, max_epoch)
 
-    train(args, model, pair_data_loader, c4_data_loader, optimizer, epoch_info, device, lr_scheduler, config,
+    train(args, model, pair_data_loader, optimizer, epoch_info, device, lr_scheduler, config,
           scalar, tokenizer)
     dist.barrier()
                 
