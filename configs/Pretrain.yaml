@@ -1,4 +1,4 @@
-train_file: ["../dataSet/cc3m/cc3m_filtered.json"]
+train_file: ["shard_jsons/vg/train", "shard_jsons/coco14/train"]
 # c4_train_file: ["path/to/c4/data"]
 
 image_name: "image"

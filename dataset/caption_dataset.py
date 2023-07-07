@@ -118,15 +118,11 @@ class pretrain_dataset(DistLineReadingDataset):
                 if isinstance(caption, list):
                     caption = random.choice(caption)
 
-                if "b64_resized_binary" not in ann and self.config['image_name'] not in ann:
-                    continue
-                elif "b64_resized_binary" in ann:
-                    image_str = b64decode(ann["b64_resized_binary"])
-                else:
-                    image_str = b64decode(ann[self.config['image_name']])
+                
+                image_str = ann[self.config['image_name']]
 
                 try:
-                    image = Image.open(io.BytesIO(image_str)).convert("RGB")
+                    image = Image.open(image_str).convert("RGB")
                 except Exception as e:
                     print("ERROR: encounter broken data, image reading error", e)
                     # print("ann = ", ann)
