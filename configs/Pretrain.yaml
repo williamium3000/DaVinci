@@ -1,5 +1,5 @@
 train_file: ["../dataSet/cc3m/cc3m_filtered.json"]
-c4_train_file: ["path/to/c4/data"]
+# c4_train_file: ["path/to/c4/data"]
 
 image_name: "image"
 caption_name: "caption"
@@ -44,7 +44,7 @@ num_return_sequences: 1
 eos: '[SEP]'
 
 # dalle
-discrete_vae_weight_path: "vqgan_ckpt"
+discrete_vae_weight_path: "pretrained"
 discrete_vae_type: "vqgan"
 
 optimizer: {opt: adamW, lr: 2e-4, weight_decay: 0.01}

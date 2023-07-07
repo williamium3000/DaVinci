@@ -76,7 +76,17 @@ def create_dataset(dataset, config):
                                                transform=None,
                                                max_words=config["enc_dec_max_words"])
 
-        return pair_dataset, c4_dataset     
+        return pair_dataset, c4_dataset    
+    if dataset=='pretrain_wo_c4':
+        pair_dataset = pretrain_dataset(config, config['train_file'], rank=int(os.environ.get('RANK') or 0),
+                                               world_size=int(os.environ.get('WORLD_SIZE') or 1), shuffle=True,
+                                               repeat=True,
+                                               common_transform=common_transform,
+                                               patch_transform=patch_transform,
+                                               visual_token_transform=visual_token_transform,
+                                               max_words=30)
+        
+        return pair_dataset   
 
     elif dataset == 'dalle_gen':
         val_dataset = gen_dataset(config['val_file'], test_transform, config['image_root'], 'val', common_transform=common_transform,

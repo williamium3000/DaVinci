@@ -495,7 +495,7 @@ def get_dalle_vae(weight_path, image_size, device):
     return vae
 
 def get_vqgan_vae(weight_path, device):
-    vae = VQGanVAE(weight_path+"/vqgan.1024.model.ckpt", weight_path+"/vqgan.1024.config.yml").to(device)
+    vae = VQGanVAE(os.path.join(weight_path, "vqgan_imagenet_f16_1024.ckpt"), os.path.join(weight_path, "vqgan_imagenet_f16_1024.yaml")).to(device)
     return vae
 
 def get_d_vae(weight_path, image_size, device):
