@@ -17,7 +17,7 @@ class DistLineReadingDataset(IterableDataset):  # pylint: disable=W0223
     """
 
     def __init__(self,
-                 data_path: tuple(str, str),
+                 data_path,
                  rank: int = 0,
                  world_size: int = 1,
                  shuffle: bool = False,

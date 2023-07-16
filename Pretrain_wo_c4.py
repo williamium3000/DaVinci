@@ -51,7 +51,6 @@ def train(args, model, pair_data_loader, optimizer, epoch_info, device, schedule
     metric_logger.add_meter('loss', utils.SmoothedValue(window_size=50, fmt='{value:.4f}'))
     metric_logger.add_meter('loss_pair', utils.SmoothedValue(window_size=50, fmt='{value:.6f}'))
     metric_logger.add_meter('loss_image_generation', utils.SmoothedValue(window_size=50, fmt='{value:.6f}'))
-    metric_logger.add_meter('loss_c4', utils.SmoothedValue(window_size=50, fmt='{value:.6f}'))
     metric_logger.add_meter('loss_mim', utils.SmoothedValue(window_size=50, fmt='{value:.6f}'))
 
     header = 'Train Epoch: [{}]'.format(start_epoch)
@@ -171,8 +170,8 @@ def train(args, model, pair_data_loader, optimizer, epoch_info, device, schedule
                 }
                 torch.save(save_obj, os.path.join(args.output_dir, 'checkpoint_%02d.pth'%current_epoch))  
             
-            with open(os.path.join(args.output_dir, "log.txt"),"a") as f:
-                f.write(json.dumps(log_stats) + "\n")
+                with open(os.path.join(args.output_dir, "log.txt"), "a") as f:
+                    f.write(json.dumps(log_stats) + "\n")
 
     # gather the stats from all processes
     metric_logger.synchronize_between_processes()
@@ -184,7 +183,7 @@ def main(args, config):
     utils.init_distributed_mode(args)
     device = torch.device(args.device)
 
-    config['train_file'] = ','.join(config['train_file'])
+    # config['train_file'] = ','.join(config['train_file'])
     # config['c4_train_file'] = ','.join(config['c4_train_file'])
 
     if utils.is_main_process():
@@ -269,7 +268,7 @@ def main(args, config):
     if args.distributed:
         print("Using DistributedDataParallel")
         # model = torch.nn.parallel.DistributedDataParallel(model, device_ids=[args.gpu])
-        model = torch.nn.parallel.DistributedDataParallel(model)  
+        model = torch.nn.parallel.DistributedDataParallel(model, find_unused_parameters=True)  
     # model, optimizer, lr_scheduler = accelerator.set_up(model, optimizer, lr_scheduler, local_rank, world_size, rank)
 
     # checkpointer = Checkpointer(args.output_dir)
