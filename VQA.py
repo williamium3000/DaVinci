@@ -30,7 +30,7 @@ from dataset import create_dataset, create_sampler, create_loader, vqa_collate_f
 
 from scheduler import create_scheduler
 from optim import create_optimizer
-from apex import amp
+# from apex import amp
 
 root_dir = Path(__file__).parent.absolute()
 model_dir = root_dir / 'models'
@@ -55,9 +55,9 @@ def train(model, data_loader, optimizer, tokenizer, epoch, warmup_epochs, device
         loss = model(image, question_input, answer_input, train=True, k=n, weights=weights)        
         
         optimizer.zero_grad()
-        with amp.scale_loss(loss, optimizer) as scaled_loss:
-            scaled_loss.backward()
-        # loss.backward()
+        # with amp.scale_loss(loss, optimizer) as scaled_loss:
+        #     scaled_loss.backward()
+        loss.backward()
         optimizer.step()  
         scheduler.step()   
         
@@ -172,7 +172,7 @@ def main(args, config):
         
     model_without_ddp = model
 
-    model, optimizer = amp.initialize(model, optimizer, opt_level="O1") # 这里是“欧一”，不是“零一”
+    # model, optimizer = amp.initialize(model, optimizer, opt_level="O1") # 这里是“欧一”，不是“零一”
     if args.distributed:
         model = torch.nn.parallel.DistributedDataParallel(model, device_ids=[args.gpu], find_unused_parameters=True)
         model_without_ddp = model.module    
