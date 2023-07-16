@@ -1,8 +1,8 @@
-train_file: ['data/nlvr_train.json']
-val_file: ['data/nlvr_dev.json']                  
-test_file: ['data/nlvr_test.json']  
+train_file: ['../dataSet/downstream_json/nlvr_train.json']
+val_file: ['../dataSet/downstream_json/nlvr_dev.json']
+test_file: ['../dataSet/downstream_json/nlvr_test.json']
 
-image_root: './images/nlvr2/' 
+image_root: '../dataSet/nlvr2'  #NLVR2-images/ 
 
 image_res: 384
 second_input_size: 384

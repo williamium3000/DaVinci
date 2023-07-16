@@ -29,7 +29,7 @@ import utils
 from dataset import create_dataset, create_sampler, create_loader
 from scheduler import create_scheduler
 from optim import create_optimizer
-from apex import amp
+# from apex import amp
 
 def train(model, data_loader, optimizer, tokenizer, epoch, warmup_epochs, device, scheduler, config):
     model.train()  
@@ -49,9 +49,9 @@ def train(model, data_loader, optimizer, tokenizer, epoch, warmup_epochs, device
         loss = model(image0, image1, text_inputs, targets=targets, train=True)    
         
         optimizer.zero_grad()
-        with amp.scale_loss(loss, optimizer) as scaled_loss:
-            scaled_loss.backward()
-        # loss.backward()
+        # with amp.scale_loss(loss, optimizer) as scaled_loss:
+        #     scaled_loss.backward()
+        loss.backward()
         optimizer.step()  
         scheduler.step()   
                
@@ -152,7 +152,7 @@ def main(args, config):
         print(msg)
   
     model_without_ddp = model
-    model, optimizer = amp.initialize(model, optimizer, opt_level="O1")
+    # model, optimizer = amp.initialize(model, optimizer, opt_level="O1")
 
     if args.distributed:
         model = torch.nn.parallel.DistributedDataParallel(model, device_ids=[args.gpu], find_unused_parameters=True)
@@ -212,8 +212,8 @@ if __name__ == '__main__':
     parser.add_argument('--config', default='./configs/NLVR.yaml')
     parser.add_argument('--checkpoint', default='') 
     parser.add_argument('--output_dir', default='output/NLVR')
-    parser.add_argument('--encoder', default='bert-base-uncased')
-    parser.add_argument('--text_decoder', default='bert-base-uncased')
+    parser.add_argument('--encoder', default='pretrained/bert-base-uncased')
+    parser.add_argument('--text_decoder', default='pretrained/bert-base-uncased')
     parser.add_argument('--device', default='cuda')
     parser.add_argument('--seed', default=42, type=int)
     parser.add_argument('--world_size', default=1, type=int, help='number of distributed processes')    
