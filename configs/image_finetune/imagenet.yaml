@@ -1,5 +1,6 @@
 dataset: imagenet
-root_dir: ./
+root_dir: ../dataSet
+
 
 image_res: 256
 second_input_size: 128
