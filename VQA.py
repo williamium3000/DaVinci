@@ -31,13 +31,14 @@ from dataset import create_dataset, create_sampler, create_loader, vqa_collate_f
 from scheduler import create_scheduler
 from optim import create_optimizer
 # from apex import amp
+from torch.cuda.amp import autocast, GradScaler
 
 root_dir = Path(__file__).parent.absolute()
 model_dir = root_dir / 'models'
 sys.path.insert(0, str(root_dir))
 sys.path.insert(0, str(model_dir))
 
-def train(model, data_loader, optimizer, tokenizer, epoch, warmup_epochs, device, scheduler, config):
+def train(model, data_loader, optimizer, tokenizer, epoch, warmup_epochs, device, scheduler, config, scalar, clip_grad_norm):
     model.train()  
     
     metric_logger = utils.MetricLogger(delimiter="  ")
@@ -57,8 +58,27 @@ def train(model, data_loader, optimizer, tokenizer, epoch, warmup_epochs, device
         optimizer.zero_grad()
         # with amp.scale_loss(loss, optimizer) as scaled_loss:
         #     scaled_loss.backward()
-        loss.backward()
-        optimizer.step()  
+        # loss.backward()
+        # optimizer.step()  
+        if scalar is not None:
+            loss = scalar.scale(loss)
+            loss.backward()
+            
+            if clip_grad_norm is not None:
+                scalar.unscale_(optimizer)
+                torch.nn.utils.clip_grad_norm_(model.parameters(), clip_grad_norm)
+            
+            scalar.step(optimizer)
+            scalar.update()
+        else:
+    
+            loss.backward()
+        
+            if clip_grad_norm is not None:
+                torch.nn.utils.clip_grad_norm_(model.parameters(), clip_grad_norm)
+                
+            optimizer.step() 
+            
         scheduler.step()   
         
         metric_logger.update(loss=loss.item())
@@ -177,7 +197,12 @@ def main(args, config):
         model = torch.nn.parallel.DistributedDataParallel(model, device_ids=[args.gpu], find_unused_parameters=True)
         model_without_ddp = model.module    
     
-    
+    if args.amp:
+        print("using fp16...")
+        scalar = GradScaler()
+    else:
+        scalar = None
+        
     print("Start training")
     start_time = time.time()
 
@@ -187,7 +212,7 @@ def main(args, config):
             if args.distributed:
                 train_loader.sampler.set_epoch(epoch)
 
-            train_stats = train(model, train_loader, optimizer, tokenizer, epoch, warmup_epochs, device, lr_scheduler, config)
+            train_stats = train(model, train_loader, optimizer, tokenizer, epoch, warmup_epochs, device, lr_scheduler, config, scalar, args.clip_grad_norm)
 
             vqa_test_result = test(model, test_loader, tokenizer, device, config)
             result_file = save_result(vqa_test_result, args.result_dir, 'vqa_test_result_epoch%d'%epoch)
@@ -230,6 +255,8 @@ if __name__ == '__main__':
     parser.add_argument('--dist_url', default='env://', help='url used to set up distributed training')
     parser.add_argument('--distributed', default=True, type=bool)
     parser.add_argument('--override_cfg', default="", type=str, help="Use ; to separate keys")
+    parser.add_argument('--amp', action="store_true")
+    parser.add_argument('--clip-grad-norm', default=None, type=float)
     args = parser.parse_args()
 
     # currently support the override of params at max depth 2
