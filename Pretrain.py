@@ -64,8 +64,9 @@ def train(args, model, pair_data_loader, c4_data_loader, optimizer, epoch_info, 
     current_step = start_epoch * step_per_epoch
     global_step = current_step + 1
 
-    for i, ((image, visual_token_image, org_texts), (null_image, c4_texts)) in enumerate(metric_logger.log_every(zip(pair_data_loader, c4_data_loader), print_freq, header, step_per_epoch, epoch_info)):
+    for i, ((image, visual_token_image, org_texts), c4_samples) in enumerate(metric_logger.log_every(zip(pair_data_loader, c4_data_loader), print_freq, header, step_per_epoch, epoch_info)):
         current_epoch = int(global_step/step_per_epoch)
+        c4_texts = c4_samples["text"]
         with autocast(enabled=scalar is not None):
         # -----------image-text-pair-------------
             image = torch.stack(image)
@@ -171,8 +172,8 @@ def train(args, model, pair_data_loader, c4_data_loader, optimizer, epoch_info, 
                 }
                 torch.save(save_obj, os.path.join(args.output_dir, 'checkpoint_%02d.pth'%current_epoch))  
             
-            with open(os.path.join(args.output_dir, "log.txt"),"a") as f:
-                f.write(json.dumps(log_stats) + "\n")
+                with open(os.path.join(args.output_dir, "log.txt"),"a") as f:
+                    f.write(json.dumps(log_stats) + "\n")
 
     # gather the stats from all processes
     metric_logger.synchronize_between_processes()
@@ -184,16 +185,16 @@ def main(args, config):
     utils.init_distributed_mode(args)
     device = torch.device(args.device)
 
-    config['train_file'] = ','.join(config['train_file'])
-    config['c4_train_file'] = ','.join(config['c4_train_file'])
+    # config['train_file'] = ','.join(config['train_file'])
+    # config['c4_train_file'] = ','.join(config['c4_train_file'])
 
     if utils.is_main_process():
         print(f"### train_file: {config['train_file']}")
-        print(f"### c4_train_file: {config['c4_train_file']}")
+        # print(f"### c4_train_file: {config['c4_train_file']}")
         sys.stdout.flush()
 
-        yaml.dump(config, open('./config.yaml', 'w'))
-        hcopy('./config.yaml', args.output_dir)
+        yaml.dump(config, open(os.path.join(args.output_dir, "config.yaml"), 'w'))
+        # hcopy('./config.yaml', args.output_dir)
 
     # fix the seed for reproducibility
     if 'seed' in config:
@@ -285,8 +286,8 @@ def main(args, config):
     total_time = time.time() - start_time
     total_time_str = str(datetime.timedelta(seconds=int(total_time)))
     print('Training time {}'.format(total_time_str)) 
-    if utils.is_main_process():
-        hcopy('./log.txt', args.output_dir)
+    # if utils.is_main_process():
+    #     hcopy('./log.txt', args.output_dir)
             
 
 if __name__ == '__main__':
@@ -295,14 +296,15 @@ if __name__ == '__main__':
     parser.add_argument('--checkpoint', default='') 
     parser.add_argument('--resume', default=False, type=bool)
     parser.add_argument('--output_dir', default='Pretrain/')
-    parser.add_argument('--encoder', default='bert-base-uncased')
-    parser.add_argument('--text_decoder', default='bert-base-uncased')
+    parser.add_argument('--encoder', default='pretrained/bert-base-uncased')
+    parser.add_argument('--text_decoder', default='pretrained/bert-base-uncased')
     parser.add_argument('--device', default='cuda')
     parser.add_argument('--seed', default=42, type=int)
     parser.add_argument('--world_size', default=1, type=int, help='number of distributed processes')    
     parser.add_argument('--dist_url', default='env://', help='url used to set up distributed training')
     parser.add_argument('--distributed', default=True, type=bool)
     parser.add_argument('--override_cfg', default="", type=str, help="Use ; to separate keys")
+    parser.add_argument('--amp', action="store_true")
     args = parser.parse_args()
 
     # currently support the override of params at max depth 2
@@ -318,7 +320,6 @@ if __name__ == '__main__':
                 config[k] = v
     if not args.output_dir.startswith('hdfs'):
         Path(args.output_dir).mkdir(parents=True, exist_ok=True)
-    hmkdir(args.output_dir)
-    print("args.output_dir: ", args.output_dir)
+    # hmkdir(args.output_dir)
     
     main(args, config)
