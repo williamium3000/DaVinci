@@ -118,7 +118,7 @@ def train(args, model, pair_data_loader, optimizer, epoch_info, device, schedule
         
             if accelerator_gradient_accumulate_steps > 1:
                 loss = loss / accelerator_gradient_accumulate_steps
-        
+            rec_loss = loss.clone().detach()
         if scalar is not None:
             loss = scalar.scale(loss)
             loss.backward()
@@ -142,7 +142,7 @@ def train(args, model, pair_data_loader, optimizer, epoch_info, device, schedule
                 scheduler.step()
                 optimizer.zero_grad()
 
-        metric_logger.update(loss=loss.item())
+        metric_logger.update(loss=rec_loss.item())
         metric_logger.update(loss_pair=loss_pair.item())
         metric_logger.update(loss_image_generation=loss_image_generation.item())
         # metric_logger.update(loss_c4=loss_c4.item())

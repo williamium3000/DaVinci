@@ -114,13 +114,13 @@ def train(args, model, pair_data_loader, c4_data_loader, optimizer, epoch_info, 
                 
             text_input = tokenizer(pre_texts, padding='longest', truncation=True, max_length=config['enc_max_tokens'], return_tensors="pt").to(device)
             text_target = tokenizer(gen_texts, padding='longest', truncation=True, max_length=config['dec_max_tokens'], return_tensors="pt").to(device)
-            loss_c4, logits = model(None, text_input, text_target, train=True, decode=False)   
+            loss_c4, logits = model(None, text_input, text_target, use_dalle=False, train=True, decode=False)   
             
             loss = config['loss_pair_alpha'] * loss_pair + config['loss_image_generation_alpha'] * loss_image_generation + config['c4_alpha'] * loss_c4 + config['loss_mim_alpha'] * loss_mim
         
             if accelerator_gradient_accumulate_steps > 1:
                 loss = loss / accelerator_gradient_accumulate_steps
-        
+            rec_loss = loss.clone().detach()
         if scalar is not None:
             loss = scalar.scale(loss)
             loss.backward()
@@ -144,7 +144,7 @@ def train(args, model, pair_data_loader, c4_data_loader, optimizer, epoch_info, 
                 scheduler.step()
                 optimizer.zero_grad()
 
-        metric_logger.update(loss=loss.item())
+        metric_logger.update(loss=rec_loss.item())
         metric_logger.update(loss_pair=loss_pair.item())
         metric_logger.update(loss_image_generation=loss_image_generation.item())
         metric_logger.update(loss_c4=loss_c4.item())
@@ -182,7 +182,6 @@ def train(args, model, pair_data_loader, c4_data_loader, optimizer, epoch_info, 
 
 @record
 def main(args, config):
-    torch.autograd.set_detect_anomaly(True)
     utils.init_distributed_mode(args)
     device = torch.device(args.device)
 
@@ -233,6 +232,7 @@ def main(args, config):
     #### Model #### 
     print("Creating model")
     model = DaVinci(config=config, encoder=args.encoder, text_decoder=args.text_decoder, tokenizer=tokenizer, init_deit=True, init_dalle=True, device=device)
+    model = torch.nn.SyncBatchNorm.convert_sync_batchnorm(model)
     model = model.to(device)   
     print("DAVINCI have {} paramerters in total".format(sum(x.numel() for x in model.parameters())))
 
@@ -271,7 +271,7 @@ def main(args, config):
     if args.distributed:
         print("Using DistributedDataParallel")
         # model = torch.nn.parallel.DistributedDataParallel(model, device_ids=[args.gpu])
-        model = torch.nn.parallel.DistributedDataParallel(model)  
+        model = torch.nn.parallel.DistributedDataParallel(model, broadcast_buffers=False)  
     # model, optimizer, lr_scheduler = accelerator.set_up(model, optimizer, lr_scheduler, local_rank, world_size, rank)
 
     # checkpointer = Checkpointer(args.output_dir)

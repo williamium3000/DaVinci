@@ -107,6 +107,8 @@ class DaVinci(nn.Module):
                 self.d_vae = dalle_utils.create_d_vae(
                     weight_path=config["discrete_vae_weight_path"], d_vae_type=config["discrete_vae_type"],
                     device=device, image_size=config["second_input_size"])
+                for param in self.d_vae.parameters():
+                    param.requires_grad = False
 
         if config["init_decoder"]:
             self.text_decoder = BertLMHeadModel.from_pretrained(text_decoder, config=self.config_decoder, label_smoothing=self.label_smoothing)
