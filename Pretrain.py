@@ -182,6 +182,7 @@ def train(args, model, pair_data_loader, c4_data_loader, optimizer, epoch_info, 
 
 @record
 def main(args, config):
+    torch.autograd.set_detect_anomaly(True)
     utils.init_distributed_mode(args)
     device = torch.device(args.device)
 

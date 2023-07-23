@@ -81,7 +81,7 @@ def create_dataset(dataset, config):
         def pre_caption_huggingface(sample):
             sample["text"] = pre_caption(sample["text"], max_words=config["enc_dec_max_words"])
             return sample
-        c4_dataset = load_dataset("c4", "en", split="train", streaming=True).map(pre_caption_huggingface)
+        c4_dataset = load_dataset("/root/.cache/huggingface/datasets/c4", "en", split="train").to_iterable_dataset(num_shards=1024).map(pre_caption_huggingface)
         c4_dataset = split_dataset_by_node(c4_dataset, rank=int(os.environ["RANK"]), world_size=int(os.environ["WORLD_SIZE"]))
         
         return pair_dataset, c4_dataset    
