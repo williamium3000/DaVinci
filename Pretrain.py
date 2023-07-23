@@ -223,7 +223,7 @@ def main(args, config):
                                                num_workers=4,
                                                pin_memory=True,
                                                drop_last=False,
-                                               collate_fn=c4_dataset.collate_fn
+                                            #    collate_fn=c4_dataset.collate_fn
                                               )
 
     tokenizer = BertTokenizer.from_pretrained(args.encoder, bos_token='[CLS]', eos_token='[SEP]', add_single_sep=False)

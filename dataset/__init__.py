@@ -70,12 +70,16 @@ def create_dataset(dataset, config):
                                                patch_transform=patch_transform,
                                                visual_token_transform=visual_token_transform,
                                                max_words=30)
-        c4_dataset = pretrain_dataset_c4(config, config['c4_train_file'], rank=int(os.environ.get('RANK') or 0),
-                                               world_size=int(os.environ.get('WORLD_SIZE') or 1), shuffle=True,
-                                               repeat=True,
-                                               transform=None,
-                                               max_words=config["enc_dec_max_words"])
-
+        # c4_dataset = pretrain_dataset_c4(config, config['c4_train_file'], rank=int(os.environ.get('RANK') or 0),
+        #                                        world_size=int(os.environ.get('WORLD_SIZE') or 1), shuffle=True,
+        #                                        repeat=True,
+        #                                        transform=None,
+        #                                        max_words=config["enc_dec_max_words"])
+        from datasets import load_dataset
+        from datasets.distributed import split_dataset_by_node
+        c4_dataset = load_dataset("c4", "en", split="train", streaming=True)
+        c4_dataset = split_dataset_by_node(c4_dataset, rank=int(os.environ["RANK"]), world_size=int(os.environ["WORLD_SIZE"]))
+        
         return pair_dataset, c4_dataset    
     if dataset=='pretrain_wo_c4':
         pair_dataset = pretrain_dataset(config, config['train_file'], rank=int(os.environ.get('RANK') or 0),
