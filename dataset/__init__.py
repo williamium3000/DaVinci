@@ -5,11 +5,12 @@ from dataset.dalle_transforms import RandomResizedCropAndInterpolationWithTwoPic
 from PIL import Image
 from timm.data.constants import \
     IMAGENET_DEFAULT_MEAN, IMAGENET_DEFAULT_STD, IMAGENET_INCEPTION_MEAN, IMAGENET_INCEPTION_STD
-from dataset.caption_dataset import re_train_dataset, re_eval_dataset, pretrain_dataset, pretrain_dataset_c4
+from dataset.caption_dataset import re_train_dataset, re_eval_dataset, pretrain_dataset, pretrain_dataset_c4, pre_caption
 from dataset.nlvr_dataset import nlvr_dataset
 from dataset.ve_dataset import ve_dataset
 from dataset.vqa_dataset import vqa_dataset
 from dataset.gen_dataset import gen_dataset
+
 
 from dataset.randaugment import RandomAugment
 import os
@@ -70,12 +71,19 @@ def create_dataset(dataset, config):
                                                patch_transform=patch_transform,
                                                visual_token_transform=visual_token_transform,
                                                max_words=30)
-        c4_dataset = pretrain_dataset_c4(config, config['c4_train_file'], rank=int(os.environ.get('RANK') or 0),
-                                               world_size=int(os.environ.get('WORLD_SIZE') or 1), shuffle=True,
-                                               repeat=True,
-                                               transform=None,
-                                               max_words=config["enc_dec_max_words"])
-
+        # c4_dataset = pretrain_dataset_c4(config, config['c4_train_file'], rank=int(os.environ.get('RANK') or 0),
+        #                                        world_size=int(os.environ.get('WORLD_SIZE') or 1), shuffle=True,
+        #                                        repeat=True,
+        #                                        transform=None,
+        #                                        max_words=config["enc_dec_max_words"])
+        from datasets import load_dataset
+        from datasets.distributed import split_dataset_by_node
+        def pre_caption_huggingface(sample):
+            sample["text"] = pre_caption(sample["text"], max_words=config["enc_dec_max_words"])
+            return sample
+        c4_dataset = load_dataset("c4", "en", split="train", streaming=True).map(pre_caption_huggingface)
+        c4_dataset = split_dataset_by_node(c4_dataset, rank=int(os.environ["RANK"]), world_size=int(os.environ["WORLD_SIZE"]))
+        
         return pair_dataset, c4_dataset    
     if dataset=='pretrain_wo_c4':
         pair_dataset = pretrain_dataset(config, config['train_file'], rank=int(os.environ.get('RANK') or 0),

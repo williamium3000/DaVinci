@@ -264,7 +264,7 @@ def main():
     # In distributed training, the load_dataset function guarantee that only one local process can concurrently
     # download the dataset.
     if args.task_name is not None:
-        raw_datasets = datasets.load_dataset("/root/.cache/huggingface/datasets/glue/glue.py", args.task_name)
+        raw_datasets = datasets.load_dataset("cd/glue.py", args.task_name)
     else:
         # Loading the dataset from local csv or json file.
         data_files = {}

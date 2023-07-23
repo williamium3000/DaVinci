@@ -21,3 +21,4 @@ accelerate
 datasets >= 1.8.0
 scipy
 scikit-learn
+*.zip
