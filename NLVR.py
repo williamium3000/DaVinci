@@ -189,7 +189,7 @@ def main(args, config):
                 'config': config,
                 'epoch': epoch,
             }
-            torch.save(save_obj, os.path.join(args.output_dir, 'checkpoint_%02d.pth'%epoch)) 
+            torch.save(save_obj, os.path.join(args.output_dir, 'checkpoint.pth')) 
             best = float(val_stats['acc'])
             best_epoch = epoch
             
@@ -197,7 +197,7 @@ def main(args, config):
                 f.write(json.dumps(log_stats) + "\n")
         
         dist.barrier()   
-                
+      
     total_time = time.time() - start_time
     total_time_str = str(datetime.timedelta(seconds=int(total_time)))
     print('Training time {}'.format(total_time_str)) 

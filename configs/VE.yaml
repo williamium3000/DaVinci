@@ -33,7 +33,7 @@ discrete_vae_weight_path: "pretrained"
 discrete_vae_type: "vqgan"
 
 optimizer: {opt: adamW, lr: 2e-5, weight_decay: 0.01}
-schedular: {sched: linear, last_epoch: -1, epochs: 3, warmup_epochs: 1}
+schedular: {sched: linear, last_epoch: -1, epochs: 5, warmup_epochs: 1}
 
 
 
