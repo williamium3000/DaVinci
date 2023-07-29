@@ -11,9 +11,23 @@ from dataset.ve_dataset import ve_dataset
 from dataset.vqa_dataset import vqa_dataset
 from dataset.gen_dataset import gen_dataset
 
+from torchvision.datasets import ImageNet
+from .iterable_dataset import IterableDatasetWrapper
 
 from dataset.randaugment import RandomAugment
 import os
+
+class MultiBranch(object):
+    def __init__(self, *transforms):
+        self.transforms = transforms
+
+    def __call__(self, results):
+        multi_results = []
+        for input_, transform in zip(results, self.transforms):
+            res = transform(input_)
+            multi_results.append(res)
+        return multi_results
+
 
 logit_laplace_eps: float = 0.1
 def map_pixels(x: torch.Tensor) -> torch.Tensor:
@@ -95,7 +109,17 @@ def create_dataset(dataset, config):
                                                max_words=30)
         
         return pair_dataset   
-
+    if dataset=='imagenet1k':
+        pretrain_transform = transforms.Compose([
+            common_transform,
+            MultiBranch(patch_transform, visual_token_transform)
+        ])
+        dataset = ImageNet(root=config["imagenet1k_root"], split="train", transform=pretrain_transform)
+        dataset = IterableDatasetWrapper(dataset, rank=int(os.environ.get('RANK') or 0), world_size=int(os.environ.get('WORLD_SIZE') or 1))
+        return dataset
+        
+        
+        
     elif dataset == 'dalle_gen':
         val_dataset = gen_dataset(config['val_file'], test_transform, config['image_root'], 'val', common_transform=common_transform,
                                                patch_transform=patch_transform,
