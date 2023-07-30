@@ -35,6 +35,7 @@ loss_image_generation_alpha: 1
 c4_alpha: 1
 loss_mim_alpha: 0
 
+prompt: 'a image of '
 num_beams: 1
 temperature: 1
 top_k: 0
@@ -48,6 +49,7 @@ eos: '[SEP]'
 # dalle
 discrete_vae_weight_path: "pretrained"
 discrete_vae_type: "vqgan"
+imagenet1k_root: "../dataSet/imagenet"
 
 optimizer: {opt: adamW, lr: 2e-4, weight_decay: 0.01}
 schedular: {sched: linear, last_epoch: -1, epochs: 10, warmup_epochs: 1}

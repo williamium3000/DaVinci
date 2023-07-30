@@ -10,3 +10,4 @@ visualgenome.tar
 work_dirs
 pretrained
 shard_jsons
+wandb

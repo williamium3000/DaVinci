@@ -9,6 +9,15 @@ import torch
 import torch.distributed as dist
 import subprocess
 
+def denormalize(images, norm_type="imagenet"):
+    # images [B, 3, H, W]
+    if norm_type == "imagenet":
+        mean = torch.tensor([0.485, 0.456, 0.406], device=images.device).view(1, 3, 1, 1).type_as(images)
+        std = torch.tensor([0.229, 0.224, 0.225], device=images.device).view(1, 3, 1, 1).type_as(images)
+    else:
+        raise NotImplementedError(f"{norm_type} not implemented")
+    return std * images + mean
+
 class SmoothedValue(object):
     """Track a series of values and provide access to smoothed values over a
     window or the global series average.

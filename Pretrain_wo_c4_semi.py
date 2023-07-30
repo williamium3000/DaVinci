@@ -45,7 +45,7 @@ sys.path.insert(0, str(model_dir))
 
 MAX_TOKENS = 30
 
-def train(args, model, pair_data_loader, image_only_loader, optimizer, epoch_info, device, scheduler, config, scalar, tokenizer, boostrap_warmup=0):
+def train(args, model, pair_data_loader, image_only_loader, optimizer, epoch_info, device, scheduler, config, scalar, tokenizer, boostrap_warmup=2):
     model.train()  
     start_epoch, _ = epoch_info
     metric_logger = utils.MetricLogger(delimiter="  ")
@@ -66,18 +66,23 @@ def train(args, model, pair_data_loader, image_only_loader, optimizer, epoch_inf
     current_step = start_epoch * step_per_epoch
     global_step = current_step + 1
 
-    for i, ((image, visual_token_image, org_texts), (image_only, visual_token_image_only)) in enumerate(metric_logger.log_every(zip(pair_data_loader, image_only_loader), print_freq, header, step_per_epoch, epoch_info)):
+    for i, ((image, visual_token_image, org_texts), ((image_only, visual_token_image_only), _)) in enumerate(metric_logger.log_every(zip(pair_data_loader, image_only_loader), print_freq, header, step_per_epoch, epoch_info)):
         current_epoch = int(global_step/step_per_epoch)
         
         if current_epoch >= boostrap_warmup:
+
             image_only = image_only.to(device, non_blocking=True) 
             model.eval()
             with torch.no_grad():
-                decoded = model(image_only, None, None, use_dalle=False, decode_text=True).detach()
+                decoded = model(
+                    image_only,
+                    tokenizer([""] * image_only.size(0), padding='longest', truncation=True, max_length=MAX_TOKENS, return_tensors="pt").to(device),
+                    None, use_dalle=False, decode=True).detach()
                 decoded_seqs = tokenizer.batch_decode(decoded, skip_special_tokens=True)
                 prompt_length = len(config.get('prompt', ''))
                 decoded_text = [seq[prompt_length:].strip() for seq in decoded_seqs]
             pseudo_size = image_only.size(0)
+        
         model.train()
         
         with autocast(enabled=scalar is not None):
@@ -181,7 +186,7 @@ def train(args, model, pair_data_loader, image_only_loader, optimizer, epoch_inf
         
         if args.rank == 0:  
             wandb.log({"lr": optimizer.param_groups[0]["lr"]}, step=global_step)
-            log_dict = {key: value.clone().detach().cpu().item() if isinstance(value, torch.Tensor) else value for key, value in metric_logger.meters.items()}
+            log_dict = {key: value.avg for key, value in metric_logger.meters.items()}
             wandb.log(log_dict, step=global_step)
         
         
@@ -262,8 +267,7 @@ def main(args, config):
     image_only_loader = torch.utils.data.DataLoader(image_only_dataset, batch_size=config['batch_size'] // 2,
                                                num_workers=4,
                                                pin_memory=True,
-                                               drop_last=False,
-                                               collate_fn=pair_dataset.collate_fn
+                                               drop_last=False
                                               )
     
     # c4_data_loader = torch.utils.data.DataLoader(c4_dataset, batch_size=config['batch_size_c4'],
@@ -316,7 +320,7 @@ def main(args, config):
     if args.distributed:
         print("Using DistributedDataParallel")
         # model = torch.nn.parallel.DistributedDataParallel(model, device_ids=[args.gpu])
-        model = torch.nn.parallel.DistributedDataParallel(model, find_unused_parameters=True)  
+        model = torch.nn.parallel.DistributedDataParallel(model, find_unused_parameters=False)  
     # model, optimizer, lr_scheduler = accelerator.set_up(model, optimizer, lr_scheduler, local_rank, world_size, rank)
 
     # checkpointer = Checkpointer(args.output_dir)
