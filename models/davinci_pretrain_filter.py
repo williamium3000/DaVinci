@@ -120,7 +120,7 @@ class DaVinci(nn.Module):
         self.config_decoder.is_decoder=True
         self.config_decoder.add_cross_attention=True
         self.config_decoder.is_encoder_decoder=False
-
+        self.itm_head = nn.Linear(emb_dim, 2) 
         if init_dalle:
             self.config_decoder.vocab_size += self.config_decoder.visual_vocab_size 
             if not imagenet:
