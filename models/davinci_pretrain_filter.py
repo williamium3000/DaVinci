@@ -224,7 +224,7 @@ class DaVinci(nn.Module):
             # calculate loss_suffix_text_generation
             loss, logits = self.decode_forward(gen_text.input_ids, encoder_states, encoder_attns, gen_text.attention_mask, train, *args, **kwargs)
             if pseudo_size > 0:
-                loss = loss[filter_mask]
+                loss = loss[filter_mask].mean()
             # producing text embeddings for full caption
             vae_context_attns = text_full.attention_mask
 
@@ -399,7 +399,7 @@ class DaVinci(nn.Module):
                                                 return_dict = True,
                                                 reduction='none'
                                                 )                      
-            loss = gen_text_output.loss.mean()
+            loss = gen_text_output.loss
             logits = gen_text_output.logits
 
             return loss, logits

@@ -320,7 +320,7 @@ def main(args, config):
     if args.distributed:
         print("Using DistributedDataParallel")
         # model = torch.nn.parallel.DistributedDataParallel(model, device_ids=[args.gpu])
-        model = torch.nn.parallel.DistributedDataParallel(model, find_unused_parameters=False)  
+        model = torch.nn.parallel.DistributedDataParallel(model, find_unused_parameters=True)  
     # model, optimizer, lr_scheduler = accelerator.set_up(model, optimizer, lr_scheduler, local_rank, world_size, rank)
 
     # checkpointer = Checkpointer(args.output_dir)
