@@ -55,6 +55,7 @@ def train(args, model, pair_data_loader, image_only_loader, optimizer, epoch_inf
     metric_logger.add_meter('loss_pair', utils.SmoothedValue(window_size=50, fmt='{value:.6f}'))
     metric_logger.add_meter('loss_image_generation', utils.SmoothedValue(window_size=50, fmt='{value:.6f}'))
     metric_logger.add_meter('loss_mim', utils.SmoothedValue(window_size=50, fmt='{value:.6f}'))
+    metric_logger.add_meter('loss_itm', utils.SmoothedValue(window_size=50, fmt='{value:.6f}'))
     metric_logger.add_meter('score_thr', utils.SmoothedValue(window_size=50, fmt='{value:.6f}'))
     metric_logger.add_meter('ratio', utils.SmoothedValue(window_size=50, fmt='{value:.6f}'))
 
@@ -187,6 +188,7 @@ def train(args, model, pair_data_loader, image_only_loader, optimizer, epoch_inf
         metric_logger.update(loss_image_generation=loss_image_generation.item())
         # metric_logger.update(loss_c4=loss_c4.item())
         metric_logger.update(loss_mim=loss_mim.item())
+        metric_logger.update(loss_itm=loss_itm.item())
         metric_logger.update(score_thr=score_thr.item())
         metric_logger.update(ratio=ratio.item())
         metric_logger.update(lr=optimizer.param_groups[0]["lr"])         
