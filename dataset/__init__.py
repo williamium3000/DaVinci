@@ -17,6 +17,13 @@ from .iterable_dataset import IterableDatasetWrapper
 from dataset.randaugment import RandomAugment
 import os
 
+class CopyForMultiBranch(object):
+    def __init__(self, num_copies=2):
+        self.num_copies = num_copies
+
+    def __call__(self, result):
+        return [result, ] * self.num_copies
+
 class MultiBranch(object):
     def __init__(self, *transforms):
         self.transforms = transforms
@@ -25,7 +32,11 @@ class MultiBranch(object):
         multi_results = []
         for input_, transform in zip(results, self.transforms):
             res = transform(input_)
-            multi_results.append(res)
+            if isinstance(res, list):
+                for r in res:
+                    multi_results.append(r)
+            else:
+                multi_results.append(res)
         return multi_results
 
 
@@ -111,9 +122,12 @@ def create_dataset(dataset, config):
         return pair_dataset   
     if dataset=='imagenet1k':
         pretrain_transform = transforms.Compose([
-            common_transform,
-            MultiBranch(patch_transform, visual_token_transform)
+            CopyForMultiBranch(2), 
+            MultiBranch(
+                transforms.Compose([transforms.Resize((256, 256)), patch_transform]),
+                transforms.Compose([common_transform, MultiBranch(patch_transform, visual_token_transform)]))
         ])
+        
         dataset = ImageNet(root=config["imagenet1k_root"], split="train", transform=pretrain_transform)
         dataset = IterableDatasetWrapper(dataset, rank=int(os.environ.get('RANK') or 0), world_size=int(os.environ.get('WORLD_SIZE') or 1))
         return dataset

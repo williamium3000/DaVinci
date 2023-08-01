@@ -45,7 +45,7 @@ sys.path.insert(0, str(model_dir))
 
 MAX_TOKENS = 30
 
-def train(args, model, pair_data_loader, image_only_loader, optimizer, epoch_info, device, scheduler, config, scalar, tokenizer, boostrap_warmup=2):
+def train(args, model, pair_data_loader, image_only_loader, optimizer, epoch_info, device, scheduler, config, scalar, tokenizer, boostrap_warmup=3):
     model.train()  
     start_epoch, _ = epoch_info
     metric_logger = utils.MetricLogger(delimiter="  ")
@@ -66,22 +66,27 @@ def train(args, model, pair_data_loader, image_only_loader, optimizer, epoch_inf
     current_step = start_epoch * step_per_epoch
     global_step = current_step + 1
 
-    for i, ((image, visual_token_image, org_texts), ((image_only, visual_token_image_only), _)) in enumerate(metric_logger.log_every(zip(pair_data_loader, image_only_loader), print_freq, header, step_per_epoch, epoch_info)):
+    for i, ((image, visual_token_image, org_texts), ((image_only_val, image_only_train, visual_token_image_only), _)) in enumerate(metric_logger.log_every(zip(pair_data_loader, image_only_loader), print_freq, header, step_per_epoch, epoch_info)):
         current_epoch = int(global_step/step_per_epoch)
         
         if current_epoch >= boostrap_warmup:
 
-            image_only = image_only.to(device, non_blocking=True) 
+            image_only_val = image_only_val.to(device, non_blocking=True) 
             model.eval()
             with torch.no_grad():
                 decoded = model(
-                    image_only,
-                    tokenizer([""] * image_only.size(0), padding='longest', truncation=True, max_length=MAX_TOKENS, return_tensors="pt").to(device),
+                    image_only_val,
+                    tokenizer([""] * image_only_val.size(0), padding='longest', truncation=True, max_length=MAX_TOKENS, return_tensors="pt").to(device),
                     None, use_dalle=False, decode=True).detach()
                 decoded_seqs = tokenizer.batch_decode(decoded, skip_special_tokens=True)
                 prompt_length = len(config.get('prompt', ''))
                 decoded_text = [seq[prompt_length:].strip() for seq in decoded_seqs]
-            pseudo_size = image_only.size(0)
+                # for visualization
+                if args.rank == 0:  
+                    image_only_visualized = utils.denormalize(image_only_val)
+                    for log_id in range(10):
+                        wandb.log({"pseudo captions": wandb.Image(ToPILImage()(image_only_visualized[log_id]), caption=decoded_text[log_id])}, step=global_step)
+            pseudo_size = image_only_val.size(0)
         
         model.train()
         
@@ -92,17 +97,12 @@ def train(args, model, pair_data_loader, image_only_loader, optimizer, epoch_inf
             visual_token_image = visual_token_image.to(device,non_blocking=True)
             
             if current_epoch >= boostrap_warmup:
-                image_only = image_only.to(device, non_blocking=True)
+                image_only_train = image_only_train.to(device, non_blocking=True)
                 visual_token_image_only = visual_token_image_only.to(device, non_blocking=True)
                 
-                image = torch.cat([image, image_only])
+                image = torch.cat([image, image_only_train])
                 visual_token_image = torch.cat([visual_token_image, visual_token_image_only])
                 org_texts = org_texts + decoded_text
-                # for visualization
-                if args.rank == 0:  
-                    image_only_visualized = utils.denormalize(image_only)
-                    image_only_visualized = ToPILImage()(image_only_visualized[0])
-                    wandb.log({"pseudo captions": wandb.Image(image_only_visualized, caption=decoded_text[0])}, step=global_step)
                 
         # -----------image-text-pair-------------
             
