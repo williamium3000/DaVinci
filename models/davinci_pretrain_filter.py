@@ -268,9 +268,9 @@ class DaVinci(nn.Module):
                 mim_offsetted_masked_images_ids = torch.cat([torch.ones((mim_offsetted_masked_images_ids.shape[0], 1), device=offsetted_masked_images_ids.device)*self.IMG_BOS, offsetted_masked_images_ids], dim=1).long()  # [64, 161]
 
                 loss_mim, logits = self.decode_forward(mim_offsetted_masked_images_ids, mim_encoder_output.last_hidden_state, mim_encoder_attns, torch.ones_like(mim_offsetted_masked_images_ids), train, *args, **kwargs)
-                return loss, loss_image_generation, loss_mim, logits
+                return loss, loss_image_generation, loss_mim, logits, loss_itm, score_thr, ratio, filter_mask
 
-            return loss, loss_image_generation, torch.Tensor([0]).to(image.device), logits
+            return loss, loss_image_generation, torch.Tensor([0]).to(image.device), logits, loss_itm, score_thr, ratio, filter_mask
         
         if imagenet == True:
             image_features = torch.mean(encoder_states[:, 1:-1, :], 1)

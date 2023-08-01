@@ -55,6 +55,8 @@ def train(args, model, pair_data_loader, image_only_loader, optimizer, epoch_inf
     metric_logger.add_meter('loss_pair', utils.SmoothedValue(window_size=50, fmt='{value:.6f}'))
     metric_logger.add_meter('loss_image_generation', utils.SmoothedValue(window_size=50, fmt='{value:.6f}'))
     metric_logger.add_meter('loss_mim', utils.SmoothedValue(window_size=50, fmt='{value:.6f}'))
+    metric_logger.add_meter('score_thr', utils.SmoothedValue(window_size=50, fmt='{value:.6f}'))
+    metric_logger.add_meter('ratio', utils.SmoothedValue(window_size=50, fmt='{value:.6f}'))
 
     header = 'Train Epoch: [{}]'.format(start_epoch)
     print_freq = 50
@@ -81,12 +83,8 @@ def train(args, model, pair_data_loader, image_only_loader, optimizer, epoch_inf
                 decoded_seqs = tokenizer.batch_decode(decoded, skip_special_tokens=True)
                 prompt_length = len(config.get('prompt', ''))
                 decoded_text = [seq[prompt_length:].strip() for seq in decoded_seqs]
-                # for visualization
-                if args.rank == 0:  
-                    image_only_visualized = utils.denormalize(image_only_val)
-                    for log_id in range(10):
-                        wandb.log({"pseudo captions": wandb.Image(ToPILImage()(image_only_visualized[log_id]), caption=decoded_text[log_id])}, step=global_step)
-            pseudo_size = image_only_val.size(0)
+                
+                pseudo_size = image_only_val.size(0)
         
         model.train()
         
@@ -135,7 +133,8 @@ def train(args, model, pair_data_loader, image_only_loader, optimizer, epoch_inf
             text_target = tokenizer(gen_texts, padding='longest', truncation=True, max_length=MAX_TOKENS, return_tensors="pt").to(device)
             text_full = tokenizer(org_texts, padding='longest', truncation=True, max_length=MAX_TOKENS, return_tensors="pt").to(device)
 
-            loss_pair, loss_image_generation, loss_mim, logits = model(image, text_input, text_target, text_full=text_full, prefix_image=prefix_image, suffix_image=suffix_image, use_dalle=True, train=True, decode=False)   
+            loss_pair, loss_image_generation, loss_mim, logits, loss_itm, score_thr, ratio, filter_mask\
+                = model(image, text_input, text_target, text_full=text_full, prefix_image=prefix_image, suffix_image=suffix_image, use_dalle=True, train=True, decode=False, pseudo_size=pseudo_size)   
             
             # # -----------c4-text-only-------------
             # pre_texts, gen_texts = [], []
@@ -149,7 +148,7 @@ def train(args, model, pair_data_loader, image_only_loader, optimizer, epoch_inf
             # text_target = tokenizer(gen_texts, padding='longest', truncation=True, max_length=config['dec_max_tokens'], return_tensors="pt").to(device)
             # loss_c4, logits = model(None, text_input, text_target, train=True, decode=False)   
             
-            loss = config['loss_pair_alpha'] * loss_pair + config['loss_image_generation_alpha'] * loss_image_generation + config['loss_mim_alpha'] * loss_mim
+            loss = config['loss_pair_alpha'] * loss_pair + config['loss_image_generation_alpha'] * loss_image_generation + config['loss_mim_alpha'] * loss_mim + config['loss_itm_alpha'] * loss_itm
         
             if accelerator_gradient_accumulate_steps > 1:
                 loss = loss / accelerator_gradient_accumulate_steps
@@ -177,11 +176,19 @@ def train(args, model, pair_data_loader, image_only_loader, optimizer, epoch_inf
                 scheduler.step()
                 optimizer.zero_grad()
 
+        # for visualization
+        if args.rank == 0:  
+            image_only_visualized = utils.denormalize(image_only_val)[filter_mask[-pseudo_size:]]
+            for log_id in range(10):
+                wandb.log({"pseudo captions": wandb.Image(ToPILImage()(image_only_visualized[log_id]), caption=decoded_text[log_id])}, step=global_step)
+            
         metric_logger.update(loss=rec_loss.item())
         metric_logger.update(loss_pair=loss_pair.item())
         metric_logger.update(loss_image_generation=loss_image_generation.item())
         # metric_logger.update(loss_c4=loss_c4.item())
         metric_logger.update(loss_mim=loss_mim.item())
+        metric_logger.update(score_thr=score_thr.item())
+        metric_logger.update(ratio=ratio.item())
         metric_logger.update(lr=optimizer.param_groups[0]["lr"])         
         
         if args.rank == 0:  
