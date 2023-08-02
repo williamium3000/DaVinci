@@ -69,6 +69,7 @@ def train(args, model, pair_data_loader, image_only_loader, optimizer, epoch_inf
     current_step = start_epoch * step_per_epoch
     global_step = current_step + 1
 
+    
     for i, ((image, visual_token_image, org_texts), ((image_only_val, image_only_train, visual_token_image_only), _)) in enumerate(metric_logger.log_every(zip(pair_data_loader, image_only_loader), print_freq, header, step_per_epoch, epoch_info)):
         current_epoch = int(global_step/step_per_epoch)
         
@@ -86,7 +87,8 @@ def train(args, model, pair_data_loader, image_only_loader, optimizer, epoch_inf
                 decoded_text = [seq[prompt_length:].strip() for seq in decoded_seqs]
                 
                 pseudo_size = image_only_val.size(0)
-        
+        else:
+            pseudo_size = 0
         model.train()
         
         with autocast(enabled=scalar is not None):
@@ -178,10 +180,11 @@ def train(args, model, pair_data_loader, image_only_loader, optimizer, epoch_inf
                 optimizer.zero_grad()
 
         # for visualization
-        if args.rank == 0:  
+        if args.rank == 0 and current_epoch >= boostrap_warmup:  
             image_only_visualized = utils.denormalize(image_only_val)[filter_mask[-pseudo_size:]]
+            decoded_text = [t for i, t in enumerate(decoded_text) if filter_mask[-pseudo_size + i]]
             for log_id in range(10):
-                wandb.log({"pseudo captions": wandb.Image(ToPILImage()(image_only_visualized[log_id]), caption=decoded_text[log_id])}, step=global_step)
+                wandb.log({f"pseudo caption {log_id}": wandb.Image(ToPILImage()(image_only_visualized[log_id]), caption=decoded_text[log_id])}, step=global_step)
             
         metric_logger.update(loss=rec_loss.item())
         metric_logger.update(loss_pair=loss_pair.item())
@@ -189,7 +192,7 @@ def train(args, model, pair_data_loader, image_only_loader, optimizer, epoch_inf
         # metric_logger.update(loss_c4=loss_c4.item())
         metric_logger.update(loss_mim=loss_mim.item())
         metric_logger.update(loss_itm=loss_itm.item())
-        metric_logger.update(score_thr=score_thr.item())
+        metric_logger.update(score_thr=score_thr)
         metric_logger.update(ratio=ratio.item())
         metric_logger.update(lr=optimizer.param_groups[0]["lr"])         
         
@@ -218,7 +221,7 @@ def train(args, model, pair_data_loader, image_only_loader, optimizer, epoch_inf
                     'config': config,
                     'epoch': current_epoch,
                 }
-                torch.save(save_obj, os.path.join(args.output_dir, 'checkpoint_%02d.pth'%current_epoch))  
+                torch.save(save_obj, os.path.join(args.output_dir, 'checkpoint.pth'))  
             
                 with open(os.path.join(args.output_dir, "log.txt"), "a") as f:
                     f.write(json.dumps(log_stats) + "\n")
@@ -329,7 +332,7 @@ def main(args, config):
     if args.distributed:
         print("Using DistributedDataParallel")
         # model = torch.nn.parallel.DistributedDataParallel(model, device_ids=[args.gpu])
-        model = torch.nn.parallel.DistributedDataParallel(model, find_unused_parameters=True)  
+        model = torch.nn.parallel.DistributedDataParallel(model, find_unused_parameters=False)  
     # model, optimizer, lr_scheduler = accelerator.set_up(model, optimizer, lr_scheduler, local_rank, world_size, rank)
 
     # checkpointer = Checkpointer(args.output_dir)

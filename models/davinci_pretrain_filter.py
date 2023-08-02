@@ -164,49 +164,52 @@ class DaVinci(nn.Module):
                                             return_dict = True)    
 
         encoder_states = encoder_output.last_hidden_state 
-        output_pos = self.encoder(text_full.input_ids,
+                   
+        
+        if use_dalle:
+            output_pos = self.encoder(text_full.input_ids,
                                             input_v_embs=image_embeds,
                                             attention_mask=torch.cat([image_atts, text_full.attention_mask], dim=1), 
                                             # output_hidden_states = True,                
                                             return_dict=True)
         
-        bs = image.size(0)
-        weights_i2t, weights_t2i = torch.ones(bs, bs).to(image.device) / bs, torch.ones(bs, bs).to(image.device)
-        weights_i2t.fill_diagonal_(0)
-        weights_t2i.fill_diagonal_(0)
-        
-        bs = image.size(0)
-        # select a negative image for each text
-        image_embeds_neg = []
-        for b in range(bs):
-            neg_idx = torch.multinomial(weights_t2i[b], 1).item()
-            image_embeds_neg.append(image_embeds[neg_idx])
-        image_embeds_neg = torch.stack(image_embeds_neg,dim=0)   
+            bs = image.size(0)
+            weights_i2t, weights_t2i = torch.ones(bs, bs).to(image.device) / bs, torch.ones(bs, bs).to(image.device)
+            weights_i2t.fill_diagonal_(0)
+            weights_t2i.fill_diagonal_(0)
+            
+            bs = image.size(0)
+            # select a negative image for each text
+            image_embeds_neg = []
+            for b in range(bs):
+                neg_idx = torch.multinomial(weights_t2i[b], 1).item()
+                image_embeds_neg.append(image_embeds[neg_idx])
+            image_embeds_neg = torch.stack(image_embeds_neg,dim=0)   
 
-        # select a negative text for each image
-        text_neg = []
-        text_atts_neg = []
-        for b in range(bs):
-            neg_idx = torch.multinomial(weights_i2t[b], 1).item()
-            text_neg.append(text_full.input_ids[neg_idx])
-            text_atts_neg.append(text_full.attention_mask[neg_idx])
-        text_neg = torch.stack(text_neg,dim=0)   
-        text_atts_neg = torch.stack(text_atts_neg,dim=0)    
-        text_all = torch.cat([text_full.input_ids, text_neg],dim=0)     
-        text_atts_all = torch.cat([text_full.attention_mask, text_atts_neg],dim=0)     
+            # select a negative text for each image
+            text_neg = []
+            text_atts_neg = []
+            for b in range(bs):
+                neg_idx = torch.multinomial(weights_i2t[b], 1).item()
+                text_neg.append(text_full.input_ids[neg_idx])
+                text_atts_neg.append(text_full.attention_mask[neg_idx])
+            text_neg = torch.stack(text_neg,dim=0)   
+            text_atts_neg = torch.stack(text_atts_neg,dim=0)    
+            text_all = torch.cat([text_full.input_ids, text_neg],dim=0)     
+            text_atts_all = torch.cat([text_full.attention_mask, text_atts_neg],dim=0)     
 
-        image_embeds_all = torch.cat([image_embeds_neg,image_embeds],dim=0)
-        image_atts_all = torch.cat([image_atts,image_atts],dim=0)  
-        output_neg = encoder_output = self.encoder(text_all,
-                                        input_v_embs=image_embeds_all,
-                                        attention_mask=torch.cat([image_atts_all, text_atts_all], dim=1), 
-                                        # output_hidden_states = True,                
-                                        return_dict=True)
-        # take the first token of text to do the matching classification
-        vl_embeddings = torch.cat([output_pos.last_hidden_state[:, image_embeds_all.size(1),:], output_neg.last_hidden_state[:, image_embeds_all.size(1),:]],dim=0)
-        vl_output = self.itm_head(vl_embeddings)   
-        
-        if pseudo_size > 0:
+            image_embeds_all = torch.cat([image_embeds_neg,image_embeds],dim=0)
+            image_atts_all = torch.cat([image_atts,image_atts],dim=0)  
+            output_neg = encoder_output = self.encoder(text_all,
+                                            input_v_embs=image_embeds_all,
+                                            attention_mask=torch.cat([image_atts_all, text_atts_all], dim=1), 
+                                            # output_hidden_states = True,                
+                                            return_dict=True)
+            # take the first token of text to do the matching classification
+            vl_embeddings = torch.cat([output_pos.last_hidden_state[:, image_embeds_all.size(1),:], output_neg.last_hidden_state[:, image_embeds_all.size(1),:]],dim=0)
+            vl_output = self.itm_head(vl_embeddings)   
+            
+            # if pseudo_size > 0:
             # we only update matching objective with clean images
             matching_score = vl_output[:bs].clone().detach().softmax(-1)[:, 1]
             matching_threshold = percentile(matching_score, 25)
@@ -214,17 +217,16 @@ class DaVinci(nn.Module):
             vl_output = torch.cat([vl_output[:bs - pseudo_size], vl_output[bs:]])
             score_thr = matching_threshold
             ratio = filter_mask.sum() / filter_mask.size(0)
+                
+            itm_labels = torch.cat([torch.ones(bs - pseudo_size,dtype=torch.long),torch.zeros(2*bs,dtype=torch.long)],
+                                dim=0).to(image.device)
+            loss_itm = F.cross_entropy(vl_output, itm_labels) 
             
-        itm_labels = torch.cat([torch.ones(bs - pseudo_size,dtype=torch.long),torch.zeros(2*bs,dtype=torch.long)],
-                            dim=0).to(image.device)
-        loss_itm = F.cross_entropy(vl_output, itm_labels)            
-        
-        if use_dalle:
-
             # calculate loss_suffix_text_generation
             loss, logits = self.decode_forward(gen_text.input_ids, encoder_states, encoder_attns, gen_text.attention_mask, train, *args, **kwargs)
             if pseudo_size > 0:
-                loss = loss[filter_mask].mean()
+                loss = loss[filter_mask]
+            loss = loss.mean()
             # producing text embeddings for full caption
             vae_context_attns = text_full.attention_mask
 
@@ -269,7 +271,6 @@ class DaVinci(nn.Module):
 
                 loss_mim, logits = self.decode_forward(mim_offsetted_masked_images_ids, mim_encoder_output.last_hidden_state, mim_encoder_attns, torch.ones_like(mim_offsetted_masked_images_ids), train, *args, **kwargs)
                 return loss, loss_image_generation, loss_mim, logits, loss_itm, score_thr, ratio, filter_mask
-
             return loss, loss_image_generation, torch.Tensor([0]).to(image.device), logits, loss_itm, score_thr, ratio, filter_mask
         
         if imagenet == True:
