@@ -313,7 +313,9 @@ class DaVinci(nn.Module):
                 return topk_ids, topk_probs 
 
         if not decode:
-            return self.decode_forward(gen_text.input_ids, encoder_states, encoder_attns, gen_text.attention_mask, train, *args, **kwargs)
+            loss, logits = self.decode_forward(gen_text.input_ids, encoder_states, encoder_attns, gen_text.attention_mask, train, *args, **kwargs)
+            loss = loss.mean()
+            return loss, logits
         else:
             # -----------------generation method1-------------------
             # return self.generate(None, encoder_states, encoder_attns, num_keep_best, do_sample)

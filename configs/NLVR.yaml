@@ -8,7 +8,7 @@ image_res: 384
 second_input_size: 384
 vision_width: 1024
 embed_dim: 256
-batch_size_train: 10
+batch_size_train: 20
 
 bert_config: 'configs/config_bert.json'
 

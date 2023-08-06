@@ -1,7 +1,7 @@
 now=$(date +"%Y%m%d_%H%M%S")
-save_path=work_dirs/pretrain_coco_vg_10e_semi_sampling/ve_davinci_cfg_5e
+save_path=work_dirs/pretrain_coco_vg_c4_10e_semi_filter/ve_davinci_cfg_5e
 cfg=configs/VE.yaml
-ckpt=work_dirs/pretrain_coco_vg_10e_semi_sampling/checkpoint_09.pth
+ckpt=work_dirs/pretrain_coco_vg_c4_10e_semi_filter/checkpoint.pth
 mkdir -p $save_path
 
 CUDA_VISIBLE_DEVICES=0,1,2,3 python -m torch.distributed.launch --nproc_per_node=4 --master_port 29506 --use_env VE.py --config $cfg \

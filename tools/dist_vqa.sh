@@ -1,7 +1,7 @@
 now=$(date +"%Y%m%d_%H%M%S")
-save_path=work_dirs/pretrain_coco_vg/vqa_davinci_cfg
+save_path=work_dirs/pretrain_coco_vg_c4_10e_semi_filter/vqa_davinci_cfg
 cfg=configs/VQA.yaml
-ckpt=work_dirs/pretrain_coco_vg/checkpoint_39.pth
+ckpt=work_dirs/pretrain_coco_vg_c4_10e_semi_filter/checkpoint.pth
 mkdir -p $save_path
 
  python -m torch.distributed.launch --nproc_per_node=8 --master_port 29506 --use_env VQA.py --config $cfg \

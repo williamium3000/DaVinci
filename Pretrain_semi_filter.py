@@ -152,7 +152,7 @@ def train(args, model, pair_data_loader, image_only_loader, c4_data_loader, opti
             text_target = tokenizer(gen_texts, padding='longest', truncation=True, max_length=config['dec_max_tokens'], return_tensors="pt").to(device)
             loss_c4, logits = model(None, text_input, text_target, use_dalle=False, train=True, decode=False)   
             
-            loss = config['loss_pair_alpha'] * loss_pair + config['loss_image_generation_alpha'] * loss_image_generation + config['c4_alpha'] * loss_c4 + config['loss_mim_alpha'] * loss_mim
+            loss = config['loss_pair_alpha'] * loss_pair + config['loss_image_generation_alpha'] * loss_image_generation + config['c4_alpha'] * loss_c4 + config['loss_mim_alpha'] * loss_mim + config['loss_itm_alpha'] * loss_itm
         
             if accelerator_gradient_accumulate_steps > 1:
                 loss = loss / accelerator_gradient_accumulate_steps
@@ -340,7 +340,7 @@ def main(args, config):
     if args.distributed:
         print("Using DistributedDataParallel")
         # model = torch.nn.parallel.DistributedDataParallel(model, device_ids=[args.gpu])
-        model = torch.nn.parallel.DistributedDataParallel(model, find_unused_parameters=False, broadcast_buffers=False)  
+        model = torch.nn.parallel.DistributedDataParallel(model, broadcast_buffers=False)  
     # model, optimizer, lr_scheduler = accelerator.set_up(model, optimizer, lr_scheduler, local_rank, world_size, rank)
 
     # checkpointer = Checkpointer(args.output_dir)
