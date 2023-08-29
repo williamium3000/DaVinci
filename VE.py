@@ -32,7 +32,7 @@ from optim import create_optimizer
 # from apex import amp
 
 
-def train(model, data_loader, optimizer, tokenizer, epoch, warmup_epochs, device, scheduler, config):
+def train(model, data_loader, optimizer, tokenizer, epoch, warmup_epochs, device, scheduler, config, scalar):
     model.train()  
     
     metric_logger = utils.MetricLogger(delimiter="  ")
@@ -41,7 +41,6 @@ def train(model, data_loader, optimizer, tokenizer, epoch, warmup_epochs, device
 
     header = 'Train Epoch: [{}]'.format(epoch)
     print_freq = 50   
-    step_size = 100
  
     for i,(images, text, targets) in enumerate(metric_logger.log_every(data_loader, print_freq, header)):
     
@@ -50,10 +49,16 @@ def train(model, data_loader, optimizer, tokenizer, epoch, warmup_epochs, device
         loss = model(images, text_inputs, targets=targets, train=True)    
         
         optimizer.zero_grad()
-        # with amp.scale_loss(loss, optimizer) as scaled_loss:
-        #     scaled_loss.backward()
-        loss.backward()
-        optimizer.step()  
+        if scalar is not None:
+            loss = scalar.scale(loss)
+            loss.backward()
+            scalar.step(optimizer)
+            scalar.update()
+        else:
+            
+            loss.backward()
+            optimizer.step()  
+        
         scheduler.step()      
                
         metric_logger.update(lr=optimizer.param_groups[0]["lr"])
@@ -156,7 +161,11 @@ def main(args, config):
         print('load checkpoint from %s'%args.checkpoint)
         print(msg)
 
-
+    if args.amp:
+        scalar = GradScaler()
+    else:
+        scalar = None
+        
     model_without_ddp = model
     # model, optimizer = amp.initialize(model, optimizer, opt_level="O1") # 这里是“欧一”，不是“零一”
     if args.distributed:
@@ -174,7 +183,7 @@ def main(args, config):
         if not args.evaluate:
             if args.distributed:
                 train_loader.sampler.set_epoch(epoch)
-            train_stats = train(model, train_loader, optimizer, tokenizer, epoch, warmup_epochs, device, lr_scheduler, config)  
+            train_stats = train(model, train_loader, optimizer, tokenizer, epoch, warmup_epochs, device, lr_scheduler, config, scalar)  
             
         val_stats = evaluate(model, val_loader, tokenizer, device, config, info="Validation")
         test_stats = evaluate(model, test_loader, tokenizer, device, config, info="Test")
@@ -237,6 +246,7 @@ if __name__ == '__main__':
     parser.add_argument('--dist_url', default='env://', help='url used to set up distributed training')
     parser.add_argument('--distributed', default=True, type=bool)
     parser.add_argument('--override_cfg', default="", type=str, help="Use ; to separate keys")
+    parser.add_argument('--amp', action="store_true")
     args = parser.parse_args()
 
     config = yaml.load(open(args.config, 'r'), Loader=yaml.Loader)

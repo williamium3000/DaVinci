@@ -5,7 +5,7 @@
 
 from models.xbert import BertConfig, BertModelImage
 from models.bert import BertLMHeadModel
-from models.resnet import resnet101emb, resnet101, wide_resnet101_2_emb, wide_resnet101_2, interpolate_pos_embed
+from models.resnet import resnet50emb, resnet50, wide_resnet101_2_emb, wide_resnet101_2, interpolate_pos_embed
 
 import torch
 from torch import nn
@@ -91,14 +91,14 @@ class DaVinci(nn.Module):
             self.visual_encoder = wide_resnet101_2_emb(embed_dim=1024, num_patches=num_patches, drop_rate=0.0)
         else:
             # base model size with resnet101
-            self.visual_encoder = resnet101emb(embed_dim=1024, num_patches=num_patches, drop_rate=0.0)
+            self.visual_encoder = resnet50emb(embed_dim=1024, num_patches=num_patches, drop_rate=0.0)
 
         if init_deit:
             print("initializing resnet...")
             if 'huge' in config['bert_config']:
                 pretrained_model = wide_resnet101_2(pretrained=True)
             else:
-                pretrained_model = resnet101(pretrained=True)
+                pretrained_model = resnet50(pretrained=True)
             model_dict = self.visual_encoder.state_dict()
             pretrained_dict = {k: v for k, v in pretrained_model.state_dict().items() if k in model_dict}
             model_dict.update(pretrained_dict) 
