@@ -182,10 +182,16 @@ def train(args, model, pair_data_loader, image_only_loader, c4_data_loader, opti
 
         # for visualization
         if args.rank == 0 and current_epoch >= boostrap_warmup:  
-            image_only_visualized = utils.denormalize(image_only_val)[filter_mask[-pseudo_size:]]
-            decoded_text = [t for i, t in enumerate(decoded_text) if filter_mask[-pseudo_size + i]]
-            for log_id in range(10):
-                wandb.log({f"pseudo caption {log_id}": wandb.Image(ToPILImage()(image_only_visualized[log_id]), caption=decoded_text[log_id])}, step=global_step)
+            image_only_visualized = utils.denormalize(image_only_val)
+            image_only_visualized_good = image_only_visualized[filter_mask[-pseudo_size:]]
+            decoded_text_good = [t for i, t in enumerate(decoded_text) if filter_mask[-pseudo_size + i]]
+            
+            image_only_visualized_bad = image_only_visualized[~filter_mask[-pseudo_size:]]
+            decoded_text_bad = [t for i, t in enumerate(decoded_text) if not filter_mask[-pseudo_size + i]]
+            for log_id in range(min(5, image_only_visualized_good.size(0))):
+                wandb.log({f"good pseudo caption {log_id}": wandb.Image(ToPILImage()(image_only_visualized_good[log_id]), caption=decoded_text_good[log_id])}, step=global_step)
+            for log_id in range(min(5, image_only_visualized_bad.size(0))):
+                wandb.log({f"bad pseudo caption {log_id}": wandb.Image(ToPILImage()(image_only_visualized_bad[log_id]), caption=decoded_text_bad[log_id])}, step=global_step)
             
         metric_logger.update(loss=rec_loss.item())
         metric_logger.update(loss_pair=loss_pair.item())

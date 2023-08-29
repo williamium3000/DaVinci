@@ -69,6 +69,7 @@ class DaVinci(nn.Module):
         self.min_length = 5
         self.tokenizer = tokenizer
         self.IMG_BOS = 2
+        self.do_sample = config["do_sample"]
         if "label_smoothing" in config:
             self.label_smoothing = config["label_smoothing"]
         else:
@@ -142,7 +143,7 @@ class DaVinci(nn.Module):
     def forward(self, 
             image, context, gen_text=None, 
             last_state_ids=None, train=True, 
-            decode=False, num_keep_best=1, do_sample=False, 
+            decode=False, num_keep_best=1, 
             text_full=None, prefix_image=None, suffix_image=None, 
             use_dalle=False, imagenet=False, is_ve=False, is_nlvr=False, 
             is_vqa=False, k=None, weights=None, pseudo_size=64, *args, **kwargs):
@@ -336,11 +337,11 @@ class DaVinci(nn.Module):
             image_embeds = encoder_states # [bsz, 578, 768]
 
             if num_beams > 1:
-                assert (do_sample is False) and (self.num_return_sequences == 1)
+                assert (self.do_sample is False) and (self.num_return_sequences == 1)
                 image_embeds = image_embeds.repeat_interleave(num_beams, dim=0) # [bsz*2, 578, 768]
 
             if self.num_return_sequences > 1:
-                assert (do_sample is True) and (num_beams == 1)
+                assert (self.do_sample is True) and (num_beams == 1)
                 image_embeds = image_embeds.repeat_interleave(self.num_return_sequences, dim=0)
                 prompt = [self.prompt] * image_embeds.size(0)
 
@@ -364,7 +365,7 @@ class DaVinci(nn.Module):
                             early_stopping=self.early_stopping,
                             num_return_sequences=self.num_return_sequences,
                             repetition_penalty=self.repetition_penalty,
-                            do_sample=do_sample,
+                            do_sample=self.do_sample,
                             bos_token_id=self.tokenizer.cls_token_id,
                             pad_token_id=self.tokenizer.pad_token_id,
                             eos_token_id=self.tokenizer.sep_token_id,
