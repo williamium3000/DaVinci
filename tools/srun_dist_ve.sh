@@ -17,4 +17,4 @@ srun --partition ica100 \
     --kill-on-bad-exit=1 \
     python -m torch.distributed.launch --nproc_per_node=4 --master_port 29506 --use_env VE.py --config $cfg \
     --output_dir $save_path \
-    --checkpoint $ckpt 2>&1 | tee $save_path/$now.txt
+    --checkpoint $ckpt 2>&1 | tee $save_path/$now.txt &
