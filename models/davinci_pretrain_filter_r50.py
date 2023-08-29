@@ -5,7 +5,7 @@
 
 from models.xbert import BertConfig, BertModelImage
 from models.bert import BertLMHeadModel
-from models.resnet import resnet101emb, resnet101, wide_resnet101_2_emb, wide_resnet101_2, interpolate_pos_embed
+from models.resnet import resnet50emb, resnet50, wide_resnet101_2_emb, wide_resnet101_2, interpolate_pos_embed
 
 import torch
 from torch import nn
@@ -69,7 +69,6 @@ class DaVinci(nn.Module):
         self.min_length = 5
         self.tokenizer = tokenizer
         self.IMG_BOS = 2
-        self.do_sample = config["do_sample"]
         if "label_smoothing" in config:
             self.label_smoothing = config["label_smoothing"]
         else:
@@ -92,14 +91,14 @@ class DaVinci(nn.Module):
             self.visual_encoder = wide_resnet101_2_emb(embed_dim=1024, num_patches=num_patches, drop_rate=0.0)
         else:
             # base model size with resnet101
-            self.visual_encoder = resnet101emb(embed_dim=1024, num_patches=num_patches, drop_rate=0.0)
+            self.visual_encoder = resnet50emb(embed_dim=1024, num_patches=num_patches, drop_rate=0.0)
 
         if init_deit:
             print("initializing resnet...")
             if 'huge' in config['bert_config']:
                 pretrained_model = wide_resnet101_2(pretrained=True)
             else:
-                pretrained_model = resnet101(pretrained=True)
+                pretrained_model = resnet50(pretrained=True)
             model_dict = self.visual_encoder.state_dict()
             pretrained_dict = {k: v for k, v in pretrained_model.state_dict().items() if k in model_dict}
             model_dict.update(pretrained_dict) 
@@ -143,7 +142,7 @@ class DaVinci(nn.Module):
     def forward(self, 
             image, context, gen_text=None, 
             last_state_ids=None, train=True, 
-            decode=False, num_keep_best=1, 
+            decode=False, num_keep_best=1, do_sample=False, 
             text_full=None, prefix_image=None, suffix_image=None, 
             use_dalle=False, imagenet=False, is_ve=False, is_nlvr=False, 
             is_vqa=False, k=None, weights=None, pseudo_size=64, *args, **kwargs):
@@ -345,11 +344,11 @@ class DaVinci(nn.Module):
             image_embeds = encoder_states # [bsz, 578, 768]
 
             if num_beams > 1:
-                assert (self.do_sample is False) and (self.num_return_sequences == 1)
+                assert (do_sample is False) and (self.num_return_sequences == 1)
                 image_embeds = image_embeds.repeat_interleave(num_beams, dim=0) # [bsz*2, 578, 768]
 
             if self.num_return_sequences > 1:
-                assert (self.do_sample is True) and (num_beams == 1)
+                assert (do_sample is True) and (num_beams == 1)
                 image_embeds = image_embeds.repeat_interleave(self.num_return_sequences, dim=0)
                 prompt = [self.prompt] * image_embeds.size(0)
 
@@ -373,7 +372,7 @@ class DaVinci(nn.Module):
                             early_stopping=self.early_stopping,
                             num_return_sequences=self.num_return_sequences,
                             repetition_penalty=self.repetition_penalty,
-                            do_sample=self.do_sample,
+                            do_sample=do_sample,
                             bos_token_id=self.tokenizer.cls_token_id,
                             pad_token_id=self.tokenizer.pad_token_id,
                             eos_token_id=self.tokenizer.sep_token_id,

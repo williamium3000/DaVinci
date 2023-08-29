@@ -5,7 +5,7 @@
 
 from models.xbert import BertConfig, BertModelImage
 from models.bert import BertLMHeadModel
-from models.resnet import resnet101emb, resnet101, wide_resnet101_2_emb, wide_resnet101_2, interpolate_pos_embed
+from models.resnet import resnet50emb, resnet50, wide_resnet101_2_emb, wide_resnet101_2, interpolate_pos_embed
 
 import torch
 from torch import nn
@@ -23,26 +23,6 @@ def tile(x, dim, n_tile):
     x = x.repeat(*(repeat_idx))
     order_index = torch.LongTensor(np.concatenate([init_dim * np.arange(n_tile) + i for i in range(init_dim)]))
     return torch.index_select(x, dim, order_index.to(x.device))   
-
-def percentile(t, q):
-    """
-    Return the ``q``-th percentile of the flattened input tensor's data.
-    
-    CAUTION:
-     * Needs PyTorch >= 1.1.0, as ``torch.kthvalue()`` is used.
-     * Values are not interpolated, which corresponds to
-       ``numpy.percentile(..., interpolation="nearest")``.
-       
-    :param t: Input tensor.
-    :param q: Percentile to compute, which must be between 0 and 100 inclusive.
-    :return: Resulting value (scalar).
-    """
-    # Note that ``kthvalue()`` works one-based, i.e. the first sorted value
-    # indeed corresponds to k=1, not k=0! Use float(q) instead of q directly,
-    # so that ``round()`` returns an integer, even if q is a np.float32.
-    k = 1 + round(.01 * float(q) * (t.numel() - 1))
-    result = t.view(-1).kthvalue(k).values.item()
-    return result
 
 class DaVinci(nn.Module):
     def __init__(self,                 
@@ -69,7 +49,6 @@ class DaVinci(nn.Module):
         self.min_length = 5
         self.tokenizer = tokenizer
         self.IMG_BOS = 2
-        self.do_sample = config["do_sample"]
         if "label_smoothing" in config:
             self.label_smoothing = config["label_smoothing"]
         else:
@@ -92,14 +71,14 @@ class DaVinci(nn.Module):
             self.visual_encoder = wide_resnet101_2_emb(embed_dim=1024, num_patches=num_patches, drop_rate=0.0)
         else:
             # base model size with resnet101
-            self.visual_encoder = resnet101emb(embed_dim=1024, num_patches=num_patches, drop_rate=0.0)
+            self.visual_encoder = resnet50emb(embed_dim=1024, num_patches=num_patches, drop_rate=0.0)
 
         if init_deit:
             print("initializing resnet...")
             if 'huge' in config['bert_config']:
                 pretrained_model = wide_resnet101_2(pretrained=True)
             else:
-                pretrained_model = resnet101(pretrained=True)
+                pretrained_model = resnet50(pretrained=True)
             model_dict = self.visual_encoder.state_dict()
             pretrained_dict = {k: v for k, v in pretrained_model.state_dict().items() if k in model_dict}
             model_dict.update(pretrained_dict) 
@@ -121,7 +100,7 @@ class DaVinci(nn.Module):
         self.config_decoder.is_decoder=True
         self.config_decoder.add_cross_attention=True
         self.config_decoder.is_encoder_decoder=False
-        self.itm_head = nn.Linear(emb_dim, 2) 
+
         if init_dalle:
             self.config_decoder.vocab_size += self.config_decoder.visual_vocab_size 
             if not imagenet:
@@ -140,13 +119,7 @@ class DaVinci(nn.Module):
         self.text_decoder.cls.predictions.decoder.weight = self.encoder.embeddings.word_embeddings.weight
         self.text_decoder.bert.embeddings.word_embeddings.weight = self.encoder.embeddings.word_embeddings.weight
 
-    def forward(self, 
-            image, context, gen_text=None, 
-            last_state_ids=None, train=True, 
-            decode=False, num_keep_best=1, 
-            text_full=None, prefix_image=None, suffix_image=None, 
-            use_dalle=False, imagenet=False, is_ve=False, is_nlvr=False, 
-            is_vqa=False, k=None, weights=None, pseudo_size=64, *args, **kwargs):
+    def forward(self, image, context, gen_text=None, last_state_ids=None, train=True, decode=False, num_keep_best=1, do_sample=False, text_full=None, prefix_image=None, suffix_image=None, use_dalle=False, imagenet=False, is_ve=False, is_nlvr=False, is_vqa=False, k=None, weights=None, *args, **kwargs):
         if image is not None:
             # image-text-pair
             image_embeds = self.visual_encoder(image)
@@ -158,83 +131,19 @@ class DaVinci(nn.Module):
             # c4 text only
             image_embeds = None
             encoder_attns = context.attention_mask
-        
         encoder_output = self.encoder(context.input_ids,
                                             input_v_embs = image_embeds,
                                             attention_mask=encoder_attns, 
                                             # output_hidden_states = True,                
                                             return_dict = True)    
 
-        encoder_states = encoder_output.last_hidden_state 
-                   
+        encoder_states = encoder_output.last_hidden_state                
         
         if use_dalle:
-            output_pos = self.encoder(text_full.input_ids,
-                                            input_v_embs=image_embeds,
-                                            attention_mask=torch.cat([image_atts, text_full.attention_mask], dim=1), 
-                                            # output_hidden_states = True,                
-                                            return_dict=True)
-        
-            bs = image.size(0)
-            weights_i2t, weights_t2i = torch.ones(bs, bs).to(image.device) / bs, torch.ones(bs, bs).to(image.device)
-            weights_i2t.fill_diagonal_(0)
-            weights_t2i.fill_diagonal_(0)
-            
-            bs = image.size(0)
-            # select a negative image for each text
-            image_embeds_neg = []
-            for b in range(bs):
-                neg_idx = torch.multinomial(weights_t2i[b], 1).item()
-                image_embeds_neg.append(image_embeds[neg_idx])
-            image_embeds_neg = torch.stack(image_embeds_neg,dim=0)   
 
-            # select a negative text for each image
-            text_neg = []
-            text_atts_neg = []
-            for b in range(bs):
-                neg_idx = torch.multinomial(weights_i2t[b], 1).item()
-                text_neg.append(text_full.input_ids[neg_idx])
-                text_atts_neg.append(text_full.attention_mask[neg_idx])
-            text_neg = torch.stack(text_neg,dim=0)   
-            text_atts_neg = torch.stack(text_atts_neg,dim=0)    
-            text_all = torch.cat([text_full.input_ids, text_neg],dim=0)     
-            text_atts_all = torch.cat([text_full.attention_mask, text_atts_neg],dim=0)     
-
-            image_embeds_all = torch.cat([image_embeds_neg,image_embeds],dim=0)
-            image_atts_all = torch.cat([image_atts,image_atts],dim=0)  
-            output_neg = self.encoder(text_all,
-                                    input_v_embs=image_embeds_all,
-                                    attention_mask=torch.cat([image_atts_all, text_atts_all], dim=1), 
-                                    # output_hidden_states = True,                
-                                    return_dict=True)
-            # take the first token of text to do the matching classification
-            vl_embeddings = torch.cat([output_pos.last_hidden_state[:, image_embeds_all.size(1),:], output_neg.last_hidden_state[:, image_embeds_all.size(1),:]],dim=0)
-            vl_output = self.itm_head(vl_embeddings)   
-            
-            # if pseudo_size > 0:
-            # we only update matching objective with clean images
-            matching_score = vl_output[:bs].clone().detach().softmax(-1)[:, 1]
-            matching_threshold = percentile(matching_score, 25)
-            filter_mask = matching_score > matching_threshold
-            vl_output = torch.cat([vl_output[:bs - pseudo_size], vl_output[bs:]])
-            score_thr = matching_threshold
-            ratio = filter_mask.sum() / filter_mask.size(0)
-                
-            itm_labels = torch.cat([torch.ones(bs - pseudo_size,dtype=torch.long),torch.zeros(2*bs,dtype=torch.long)],
-                                dim=0).to(image.device)
-            loss_itm = F.cross_entropy(vl_output, itm_labels) 
-            
-            
-            
             # calculate loss_suffix_text_generation
             loss, logits = self.decode_forward(gen_text.input_ids, encoder_states, encoder_attns, gen_text.attention_mask, train, *args, **kwargs)
-            if pseudo_size > 0:
-                loss = loss[filter_mask]
-            loss = loss.mean()
-            
-            
-            
-            
+                
             # producing text embeddings for full caption
             vae_context_attns = text_full.attention_mask
 
@@ -259,11 +168,7 @@ class DaVinci(nn.Module):
             offsetted_masked_images_ids = torch.cat([torch.ones((offsetted_masked_images_ids.shape[0], 1), device=offsetted_masked_images_ids.device)*self.IMG_BOS, offsetted_masked_images_ids], dim=1).long()
 
             loss_image_generation, logits = self.decode_forward(offsetted_masked_images_ids, vae_encoder_output.last_hidden_state, vae_encoder_attns, torch.ones_like(offsetted_masked_images_ids), train, *args, **kwargs)
-            if pseudo_size > 0:
-                loss_image_generation = loss_image_generation[filter_mask]
-            loss_image_generation = loss_image_generation.mean()
 
-            
             if self.do_mim and prefix_image_embeds is not None:
                 dummy_text_input = self.tokenizer([""] * image.size(0), return_tensors="pt").to(image.device)
                 mim_encoder_attns = torch.cat([prefix_image_atts, dummy_text_input.attention_mask], dim=1)
@@ -279,8 +184,9 @@ class DaVinci(nn.Module):
                 mim_offsetted_masked_images_ids = torch.cat([torch.ones((mim_offsetted_masked_images_ids.shape[0], 1), device=offsetted_masked_images_ids.device)*self.IMG_BOS, offsetted_masked_images_ids], dim=1).long()  # [64, 161]
 
                 loss_mim, logits = self.decode_forward(mim_offsetted_masked_images_ids, mim_encoder_output.last_hidden_state, mim_encoder_attns, torch.ones_like(mim_offsetted_masked_images_ids), train, *args, **kwargs)
-                return loss, loss_image_generation, loss_mim, logits, loss_itm, score_thr, ratio, filter_mask
-            return loss, loss_image_generation, torch.Tensor([0]).to(image.device), logits, loss_itm, score_thr, ratio, filter_mask
+                return loss, loss_image_generation, loss_mim, logits
+
+            return loss, loss_image_generation, torch.Tensor([0]).to(image.device), logits
         
         if imagenet == True:
             image_features = torch.mean(encoder_states[:, 1:-1, :], 1)
@@ -322,9 +228,7 @@ class DaVinci(nn.Module):
                 return topk_ids, topk_probs 
 
         if not decode:
-            loss, logits = self.decode_forward(gen_text.input_ids, encoder_states, encoder_attns, gen_text.attention_mask, train, *args, **kwargs)
-            loss = loss.mean()
-            return loss, logits
+            return self.decode_forward(gen_text.input_ids, encoder_states, encoder_attns, gen_text.attention_mask, train, *args, **kwargs)
         else:
             # -----------------generation method1-------------------
             # return self.generate(None, encoder_states, encoder_attns, num_keep_best, do_sample)
@@ -345,11 +249,11 @@ class DaVinci(nn.Module):
             image_embeds = encoder_states # [bsz, 578, 768]
 
             if num_beams > 1:
-                assert (self.do_sample is False) and (self.num_return_sequences == 1)
+                assert (do_sample is False) and (self.num_return_sequences == 1)
                 image_embeds = image_embeds.repeat_interleave(num_beams, dim=0) # [bsz*2, 578, 768]
 
             if self.num_return_sequences > 1:
-                assert (self.do_sample is True) and (num_beams == 1)
+                assert (do_sample is True) and (num_beams == 1)
                 image_embeds = image_embeds.repeat_interleave(self.num_return_sequences, dim=0)
                 prompt = [self.prompt] * image_embeds.size(0)
 
@@ -373,7 +277,7 @@ class DaVinci(nn.Module):
                             early_stopping=self.early_stopping,
                             num_return_sequences=self.num_return_sequences,
                             repetition_penalty=self.repetition_penalty,
-                            do_sample=self.do_sample,
+                            do_sample=do_sample,
                             bos_token_id=self.tokenizer.cls_token_id,
                             pad_token_id=self.tokenizer.pad_token_id,
                             eos_token_id=self.tokenizer.sep_token_id,
@@ -408,10 +312,9 @@ class DaVinci(nn.Module):
                                                 encoder_hidden_states = encoder_states,
                                                 encoder_attention_mask = encoder_atts,                  
                                                 labels = gen_text_targets,
-                                                return_dict = True,
-                                                reduction='none'
+                                                return_dict = True
                                                 )                      
-            loss = gen_text_output.loss
+            loss = gen_text_output.loss.mean()
             logits = gen_text_output.logits
 
             return loss, logits
