@@ -1,6 +1,6 @@
 now=$(date +"%Y%m%d_%H%M%S")
-config=configs/Pretrain_10e_semi_acc2_4gpu.yaml
-save_path=work_dirs/pretrain_coco_vg_10e_semi_filter_acc2_4gpu_modality
+config=configs/Pretrain_10e_semi_acc2_4gpu_vg_only.yaml
+save_path=work_dirs/Pretrain_10e_semi_acc2_4gpu_vg_only
 mkdir -p $save_path
 
 
@@ -11,12 +11,12 @@ srun --partition ica100 \
     --nodes=1 \
     --job-name=pretrain \
     --mem=200G  \
-    --time 72:00:00 \
-    -A ayuille1_gpu    \
+    --time 48:00:00 \
+    -A hwang9_gpu    \
     --kill-on-bad-exit=1 \
     python -m torch.distributed.launch --nproc_per_node=4  \
     --master_port=39587 \
-    --use_env Pretrain_semi_filter_modality.py \
+    --use_env Pretrain_semi_filter.py \
     --config $config \
     --amp  \
-    --output_dir $save_path 2>&1 | tee $save_path/$now.txt
+    --output_dir $save_path 2>&1 | tee $save_path/$now.txt &
