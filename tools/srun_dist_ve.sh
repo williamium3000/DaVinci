@@ -1,7 +1,7 @@
 now=$(date +"%Y%m%d_%H%M%S")
-save_path=work_dirs/Pretrain_10e_semi_acc2_8gpu_sampling-topk50-topp0.95-t0.7_coco_vg_semi_filter/ve_davinci_cfg_5e
+save_path=work_dirs/Pretrain_10e_semi_acc2_4gpu_vg_only/ve_davinci_cfg_5e
 cfg=configs/VE.yaml
-ckpt=work_dirs/Pretrain_10e_semi_acc2_8gpu_sampling-topk50-topp0.95-t0.7_coco_vg_semi_filter/checkpoint.pth
+ckpt=work_dirs/Pretrain_10e_semi_acc2_4gpu_vg_only/checkpoint.pth
 mkdir -p $save_path
 
 
