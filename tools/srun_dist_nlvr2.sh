@@ -1,7 +1,7 @@
 now=$(date +"%Y%m%d_%H%M%S")
-save_path=work_dirs/Pretrain_10e_semi_acc2_4gpu_coco_only/nlvr2
+save_path=work_dirs/Pretrain_10e_wo_c4_acc2_4gpu_vg_only/nlvr2
 cfg=configs/NLVR.yaml
-ckpt=work_dirs/Pretrain_10e_semi_acc2_4gpu_coco_only/checkpoint.pth
+ckpt=work_dirs/Pretrain_10e_wo_c4_acc2_4gpu_vg_only/checkpoint_09.pth
 mkdir -p $save_path
 
 srun --partition ica100 \
