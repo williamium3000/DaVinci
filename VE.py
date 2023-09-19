@@ -29,6 +29,7 @@ import utils
 from dataset import create_dataset, create_sampler, create_loader
 from scheduler import create_scheduler
 from optim import create_optimizer
+from torch.cuda.amp import autocast, GradScaler
 # from apex import amp
 
 
@@ -43,11 +44,12 @@ def train(model, data_loader, optimizer, tokenizer, epoch, warmup_epochs, device
     print_freq = 50   
  
     for i,(images, text, targets) in enumerate(metric_logger.log_every(data_loader, print_freq, header)):
-    
-        images, targets = images.to(device,non_blocking=True), targets.to(device,non_blocking=True)
-        text_inputs = tokenizer(text, padding='longest', return_tensors="pt").to(device) 
-        loss = model(images, text_inputs, targets=targets, train=True)    
         
+        with autocast(enabled=scalar is not None):
+            images, targets = images.to(device,non_blocking=True), targets.to(device,non_blocking=True)
+            text_inputs = tokenizer(text, padding='longest', return_tensors="pt").to(device) 
+            loss = model(images, text_inputs, targets=targets, train=True)    
+            loss_rec = loss
         optimizer.zero_grad()
         if scalar is not None:
             loss = scalar.scale(loss)
@@ -62,7 +64,7 @@ def train(model, data_loader, optimizer, tokenizer, epoch, warmup_epochs, device
         scheduler.step()      
                
         metric_logger.update(lr=optimizer.param_groups[0]["lr"])
-        metric_logger.update(loss=loss.item())   
+        metric_logger.update(loss=loss_rec.item())   
         
     # gather the stats from all processes
     metric_logger.synchronize_between_processes()

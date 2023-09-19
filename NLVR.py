@@ -42,6 +42,8 @@ def train(model, data_loader, optimizer, tokenizer, epoch, warmup_epochs, device
     print_freq = 50   
 
     for i,(image0, image1, text, targets) in enumerate(metric_logger.log_every(data_loader, print_freq, header)):
+        
+
         image0, image1, targets = image0.to(device), image1.to(device), targets.to(device)   
         
         text_inputs = tokenizer(text, padding='longest', return_tensors="pt").to(device)  

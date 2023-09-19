@@ -20,7 +20,7 @@ import torch
 import torch.backends.cudnn as cudnn
 import torch.distributed as dist
 
-from models.davinci_pretrain_filter import DaVinci
+from models.davinci_pretrain_filter_contrastive_sampling import DaVinci
 from models.resnet import interpolate_pos_embed
 from models.tokenization_bert import BertTokenizer
 
@@ -45,7 +45,7 @@ sys.path.insert(0, str(model_dir))
 
 MAX_TOKENS = 30
 
-def train(args, model, pair_data_loader, image_only_loader, optimizer, epoch_info, device, scheduler, config, scalar, tokenizer, boostrap_warmup=3):
+def train(args, model, pair_data_loader, image_only_loader, c4_data_loader, optimizer, epoch_info, device, scheduler, config, scalar, tokenizer, boostrap_warmup=3):
     model.train()  
     start_epoch, _ = epoch_info
     metric_logger = utils.MetricLogger(delimiter="  ")
@@ -58,6 +58,7 @@ def train(args, model, pair_data_loader, image_only_loader, optimizer, epoch_inf
     metric_logger.add_meter('loss_itm', utils.SmoothedValue(window_size=50, fmt='{value:.6f}'))
     metric_logger.add_meter('score_thr', utils.SmoothedValue(window_size=50, fmt='{value:.6f}'))
     metric_logger.add_meter('ratio', utils.SmoothedValue(window_size=50, fmt='{value:.6f}'))
+    metric_logger.add_meter('loss_c4', utils.SmoothedValue(window_size=50, fmt='{value:.6f}'))
 
     header = 'Train Epoch: [{}]'.format(start_epoch)
     print_freq = 50
@@ -70,9 +71,9 @@ def train(args, model, pair_data_loader, image_only_loader, optimizer, epoch_inf
     global_step = current_step + 1
 
     
-    for i, ((image, visual_token_image, org_texts), ((image_only_val, image_only_train, visual_token_image_only), _)) in enumerate(metric_logger.log_every(zip(pair_data_loader, image_only_loader), print_freq, header, step_per_epoch, epoch_info)):
+    for i, ((image, visual_token_image, org_texts), ((image_only_val, image_only_train, visual_token_image_only), _), c4_samples) in enumerate(metric_logger.log_every(zip(pair_data_loader, image_only_loader, c4_data_loader), print_freq, header, step_per_epoch, epoch_info)):
         current_epoch = int(global_step/step_per_epoch)
-        
+        c4_texts = c4_samples["text"]
         if current_epoch >= boostrap_warmup:
 
             image_only_val = image_only_val.to(device, non_blocking=True) 
@@ -139,19 +140,19 @@ def train(args, model, pair_data_loader, image_only_loader, optimizer, epoch_inf
             loss_pair, loss_image_generation, loss_mim, logits, loss_itm, score_thr, ratio, filter_mask\
                 = model(image, text_input, text_target, text_full=text_full, prefix_image=prefix_image, suffix_image=suffix_image, use_dalle=True, train=True, decode=False, pseudo_size=pseudo_size)   
             
-            # # -----------c4-text-only-------------
-            # pre_texts, gen_texts = [], []
-            # for text in c4_texts:
-            #     wds = text.split(" ")
-            #     pre_len = min(np.random.randint(0, len(wds)), config['enc_max_words'])
-            #     pre_texts.append(" ".join(wds[:pre_len]))
-            #     gen_texts.append(" ".join(wds[pre_len:]))
+            # -----------c4-text-only-------------
+            pre_texts, gen_texts = [], []
+            for text in c4_texts:
+                wds = text.split(" ")
+                pre_len = min(np.random.randint(0, len(wds)), config['enc_max_words'])
+                pre_texts.append(" ".join(wds[:pre_len]))
+                gen_texts.append(" ".join(wds[pre_len:]))
                 
-            # text_input = tokenizer(pre_texts, padding='longest', truncation=True, max_length=config['enc_max_tokens'], return_tensors="pt").to(device)
-            # text_target = tokenizer(gen_texts, padding='longest', truncation=True, max_length=config['dec_max_tokens'], return_tensors="pt").to(device)
-            # loss_c4, logits = model(None, text_input, text_target, train=True, decode=False)   
+            text_input = tokenizer(pre_texts, padding='longest', truncation=True, max_length=config['enc_max_tokens'], return_tensors="pt").to(device)
+            text_target = tokenizer(gen_texts, padding='longest', truncation=True, max_length=config['dec_max_tokens'], return_tensors="pt").to(device)
+            loss_c4, logits = model(None, text_input, text_target, use_dalle=False, train=True, decode=False)   
             
-            loss = config['loss_pair_alpha'] * loss_pair + config['loss_image_generation_alpha'] * loss_image_generation + config['loss_mim_alpha'] * loss_mim + config['loss_itm_alpha'] * loss_itm
+            loss = config['loss_pair_alpha'] * loss_pair + config['loss_image_generation_alpha'] * loss_image_generation + config['c4_alpha'] * loss_c4 + config['loss_mim_alpha'] * loss_mim + config['loss_itm_alpha'] * loss_itm
         
             if accelerator_gradient_accumulate_steps > 1:
                 loss = loss / accelerator_gradient_accumulate_steps
@@ -198,6 +199,7 @@ def train(args, model, pair_data_loader, image_only_loader, optimizer, epoch_inf
         # metric_logger.update(loss_c4=loss_c4.item())
         metric_logger.update(loss_mim=loss_mim.item())
         metric_logger.update(loss_itm=loss_itm.item())
+        metric_logger.update(loss_c4=loss_c4.item())
         metric_logger.update(score_thr=score_thr)
         metric_logger.update(ratio=ratio.item())
         metric_logger.update(lr=optimizer.param_groups[0]["lr"])         
@@ -273,7 +275,7 @@ def main(args, config):
 
     #### Dataset #### 
     print("Creating dataset")
-    pair_dataset = create_dataset('pretrain_wo_c4', config)
+    pair_dataset, c4_dataset = create_dataset('pretrain', config)
     image_only_dataset = create_dataset('imagenet1k', config)
 
     pair_data_loader = torch.utils.data.DataLoader(pair_dataset, batch_size=config['batch_size'] // 2,
@@ -287,7 +289,12 @@ def main(args, config):
                                                pin_memory=True,
                                                drop_last=False
                                               )
-    
+    c4_data_loader = torch.utils.data.DataLoader(c4_dataset, batch_size=config['batch_size_c4'],
+                                               num_workers=4,
+                                               pin_memory=True,
+                                               drop_last=False,
+                                            #    collate_fn=c4_dataset.collate_fn
+                                              )
     # c4_data_loader = torch.utils.data.DataLoader(c4_dataset, batch_size=config['batch_size_c4'],
     #                                            num_workers=4,
     #                                            pin_memory=True,
@@ -300,6 +307,7 @@ def main(args, config):
     #### Model #### 
     print("Creating model")
     model = DaVinci(config=config, encoder=args.encoder, text_decoder=args.text_decoder, tokenizer=tokenizer, init_deit=True, init_dalle=True, device=device)
+    model = torch.nn.SyncBatchNorm.convert_sync_batchnorm(model)
     model = model.to(device)   
     print("DAVINCI have {} paramerters in total".format(sum(x.numel() for x in model.parameters())))
 
@@ -338,7 +346,7 @@ def main(args, config):
     if args.distributed:
         print("Using DistributedDataParallel")
         # model = torch.nn.parallel.DistributedDataParallel(model, device_ids=[args.gpu])
-        model = torch.nn.parallel.DistributedDataParallel(model, find_unused_parameters=False)  
+        model = torch.nn.parallel.DistributedDataParallel(model, broadcast_buffers=False)  
     # model, optimizer, lr_scheduler = accelerator.set_up(model, optimizer, lr_scheduler, local_rank, world_size, rank)
 
     # checkpointer = Checkpointer(args.output_dir)
@@ -347,7 +355,7 @@ def main(args, config):
     start_time = time.time()
     epoch_info = (start_epoch, max_epoch)
 
-    train(args, model, pair_data_loader, image_only_loader, optimizer, epoch_info, device, lr_scheduler, config,
+    train(args, model, pair_data_loader, image_only_loader, c4_data_loader, optimizer, epoch_info, device, lr_scheduler, config,
           scalar, tokenizer)
     dist.barrier()
                 

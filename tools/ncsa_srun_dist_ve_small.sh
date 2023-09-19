@@ -1,19 +1,19 @@
 now=$(date +"%Y%m%d_%H%M%S")
-save_path=work_dirs/Pretrain_10e_semi_acc2_8gpu_sampling-topk50-topp0.95-t0.7_coco_vg_semi_filter/ve_davinci_cfg_5e
-cfg=configs/VE.yaml
-ckpt=work_dirs/Pretrain_10e_semi_acc2_8gpu_sampling-topk50-topp0.95-t0.7_coco_vg_semi_filter/checkpoint.pth
+save_path=work_dirs/pretrain_coco_vg_c4_10e_small/ve_davinci_cfg_5e
+cfg=configs/VE_small.yaml
+ckpt=work_dirs/pretrain_coco_vg_c4_10e_small/checkpoint_09.pth
 mkdir -p $save_path
 
 
-srun --partition ica100 \
+srun --partition gpuA100x4 \
     --gres=gpu:4 \
     --ntasks-per-node=1 \
     --cpus-per-task=5 \
     --nodes=1 \
     --job-name=pretrain \
-    --mem=200G  \
-    --time 72:00:00 \
-    -A ayuille1_gpu    \
+    --mem-per-cpu=20GB  \
+    --time 48:00:00 \
+    -A bbrt-delta-gpu    \
     --kill-on-bad-exit=1 \
     python -m torch.distributed.launch --nproc_per_node=4 --master_port 29506 --use_env VE_small.py --config $cfg \
     --output_dir $save_path \

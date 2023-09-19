@@ -1,11 +1,12 @@
 train_file: [
+  ["shard_jsons/vg/train", '../dataSet/vg'], 
   ["shard_jsons/coco14/train", '../dataSet/coco14/images']]
 # c4_train_file: ["path/to/c4/data"]
 
 image_name: "image"
 caption_name: "caption"
 train_file_tokenized: false
-train_dataset_size: 82783 # 1335283 vg: 108249
+train_dataset_size: 1335283
 checkpoint_frequent: 10000
 bert_config: 'configs/config_bert.json'
 init_encoder: False
@@ -15,8 +16,8 @@ image_res: 256
 second_input_size: 256
 vision_width: 1024
 embed_dim: 256
-batch_size: 64 # 64x8
-batch_size_c4: 64 # 64x8
+batch_size: 32 # 32x8
+batch_size_c4: 32 # 32x8
 temp: 0.07
 dalle_goal: "mask"
 prefix_image: "dynamic"
@@ -35,15 +36,10 @@ c4_alpha: 1
 loss_itm_alpha: 1
 loss_mim_alpha: 0
 
+do_sample: true
 prompt: 'a image of '
-num_beams: 5
-temperature: 1
-top_k: 0
-top_p: 1
-repetition_penalty: 1
-length_penalty: 1
-early_stopping: false 
-do_sample: false
+top_k: 4
+penalty_alpha: 0.6
 num_return_sequences: 1
 eos: '[SEP]'
 

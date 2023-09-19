@@ -49,12 +49,13 @@ def train(model, data_loader, optimizer, tokenizer, epoch, warmup_epochs, device
     print_freq = 50    
     
     for i,(image, question, answer, weights, question_id, n) in enumerate(metric_logger.log_every(data_loader, print_freq, header)):
-        image, weights = image.to(device,non_blocking=True), weights.to(device,non_blocking=True)      
-        question_input = tokenizer(question, padding='longest', truncation=True, max_length=25, return_tensors="pt").to(device) 
-        answer_input = tokenizer(answer, padding='longest', return_tensors="pt").to(device) 
-    
-        loss = model(image, question_input, answer_input, train=True, k=n, weights=weights)        
+        with autocast(enabled=scalar is not None):
+            image, weights = image.to(device,non_blocking=True), weights.to(device,non_blocking=True)      
+            question_input = tokenizer(question, padding='longest', truncation=True, max_length=25, return_tensors="pt").to(device) 
+            answer_input = tokenizer(answer, padding='longest', return_tensors="pt").to(device) 
         
+            loss = model(image, question_input, answer_input, train=True, k=n, weights=weights)        
+            loss_rec = loss
         optimizer.zero_grad()
         # with amp.scale_loss(loss, optimizer) as scaled_loss:
         #     scaled_loss.backward()
@@ -81,7 +82,7 @@ def train(model, data_loader, optimizer, tokenizer, epoch, warmup_epochs, device
             
         scheduler.step()   
         
-        metric_logger.update(loss=loss.item())
+        metric_logger.update(loss=loss_rec.item())
         metric_logger.update(lr=optimizer.param_groups[0]["lr"])
                
     # gather the stats from all processes
