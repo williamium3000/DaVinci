@@ -1,7 +1,9 @@
 train_file: [
   ["shard_jsons/coco14/train", '../dataSet/coco14/images']]
 # c4_train_file: ["path/to/c4/data"]
-
+blip_imagenet_file: [
+  ["shard_jsons/blip_imagenet", '../dataSet/imagenet/train'], 
+]
 image_name: "image"
 caption_name: "caption"
 train_file_tokenized: false

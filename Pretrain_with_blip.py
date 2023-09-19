@@ -65,8 +65,8 @@ def train(args, model, pair_data_loader, blip_data_loader, c4_data_loader, optim
     global_step = current_step + 1
 
     for i, ((image, visual_token_image, org_texts), (image2, visual_token_image2, org_texts2), c4_samples) in enumerate(metric_logger.log_every(zip(pair_data_loader, blip_data_loader, c4_data_loader), print_freq, header, step_per_epoch, epoch_info)):
-        image = torch.cat([image, image2])
-        visual_token_image = torch.cat([visual_token_image, visual_token_image2])
+        image = image + image2
+        visual_token_image = visual_token_image + visual_token_image2
         org_texts = org_texts + org_texts2
         
         
