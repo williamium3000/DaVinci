@@ -219,13 +219,13 @@ def main(args, config):
     pair_dataset, c4_dataset = create_dataset('pretrain', config)
     blip_dataset = create_dataset('blip_imagenet', config)
 
-    pair_data_loader = torch.utils.data.DataLoader(pair_dataset, batch_size=config['batch_size'],
+    pair_data_loader = torch.utils.data.DataLoader(pair_dataset, batch_size=config['batch_size'] // 2,
                                                num_workers=4,
                                                pin_memory=True,
                                                drop_last=False,
                                                collate_fn=pair_dataset.collate_fn
                                               )
-    blip_data_loader = torch.utils.data.DataLoader(blip_dataset, batch_size=config['batch_size'],
+    blip_data_loader = torch.utils.data.DataLoader(blip_dataset, batch_size=config['batch_size'] // 2,
                                                num_workers=4,
                                                pin_memory=True,
                                                drop_last=False,
