@@ -1,14 +1,14 @@
-train_file: ['../dataSet/downstream_json/nlvr_train.json']
-val_file: ['../dataSet/downstream_json/nlvr_dev.json']
-test_file: ['../dataSet/downstream_json/nlvr_test.json']
+train_file: ['data/nlvr_train.json']
+val_file: ['data/nlvr_dev.json']                  
+test_file: ['data/nlvr_test.json']  
 
-image_root: '../dataSet/nlvr2'  #NLVR2-images/ 
+image_root: './images/nlvr2/' 
 
 image_res: 384
 second_input_size: 384
 vision_width: 1024
 embed_dim: 256
-batch_size_train: 20
+batch_size_train: 10
 
 bert_config: 'configs/config_bert.json'
 
@@ -26,7 +26,7 @@ init_decoder: False
 last_hidden_id_shift: 1
 
 # dalle
-discrete_vae_weight_path: "pretrained"
+discrete_vae_weight_path: "vqgan_ckpt"
 discrete_vae_type: "vqgan"
 
 optimizer: {opt: adamW, lr: 2e-5, weight_decay: 0.0}

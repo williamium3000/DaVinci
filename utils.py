@@ -7,16 +7,7 @@ import datetime
 
 import torch
 import torch.distributed as dist
-import subprocess
 
-def denormalize(images, norm_type="imagenet"):
-    # images [B, 3, H, W]
-    if norm_type == "imagenet":
-        mean = torch.tensor([0.485, 0.456, 0.406], device=images.device).view(1, 3, 1, 1).type_as(images)
-        std = torch.tensor([0.229, 0.224, 0.225], device=images.device).view(1, 3, 1, 1).type_as(images)
-    else:
-        raise NotImplementedError(f"{norm_type} not implemented")
-    return std * images + mean
 
 class SmoothedValue(object):
     """Track a series of values and provide access to smoothed values over a
@@ -255,32 +246,14 @@ def save_on_master(*args, **kwargs):
         torch.save(*args, **kwargs)
 
 
-
 def init_distributed_mode(args):
     if 'RANK' in os.environ and 'WORLD_SIZE' in os.environ:
         args.rank = int(os.environ["RANK"])
         args.world_size = int(os.environ['WORLD_SIZE'])
-        if hasattr(args, "local_rank") and args.local_rank is not None:
-            args.gpu = args.local_rank
-        else:
-            args.gpu = int(os.environ['LOCAL_RANK'])
+        args.gpu = int(os.environ['LOCAL_RANK'])
     elif 'SLURM_PROCID' in os.environ:
-        print("Using SLURM!")
-        args.rank = int(os.environ["SLURM_PROCID"])
+        args.rank = int(os.environ['SLURM_PROCID'])
         args.gpu = args.rank % torch.cuda.device_count()
-        args.world_size = int(os.environ["SLURM_NTASKS"])
-        node_list = os.environ["SLURM_NODELIST"]
-        addr = subprocess.getoutput(f"scontrol show hostname {node_list} | head -n1")
-        # specify master port
-        if "MASTER_PORT" not in os.environ:
-            os.environ["MASTER_PORT"] = "30685"
-            
-        if "MASTER_ADDR" not in os.environ:
-            os.environ["MASTER_ADDR"] = addr
-            
-        os.environ["WORLD_SIZE"] = str(args.world_size)
-        os.environ["LOCAL_RANK"] = str(args.gpu)
-        os.environ["RANK"] = str(args.rank)
     else:
         print('Not using distributed mode')
         args.distributed = False

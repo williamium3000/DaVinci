@@ -1,14 +1,14 @@
-train_file: '../dataSet/downstream_json/ve_train.json'
-val_file: '../dataSet/downstream_json/ve_dev.json'
-test_file: '../dataSet/downstream_json/ve_test.json'
+train_file: 'data/ve_train.json'
+val_file: 'data/ve_dev.json'                
+test_file: 'data/ve_test.json'
 
-image_root: '../dataSet/flickr30k/images/flickr30k-images/'
+image_root: './images/snlive_images'
 
 image_res: 576
 second_input_size: 576
 vision_width: 1024
 embed_dim: 256
-batch_size_train: 16 # 8x8
+batch_size_train: 8
 batch_size_test: 16
 alpha: 0.4
 warm_up: False
@@ -29,11 +29,11 @@ last_hidden_id_shift: 1
 
 bert_config: 'configs/config_bert.json'
 # dalle
-discrete_vae_weight_path: "pretrained"
+discrete_vae_weight_path: "vqgan_ckpt"
 discrete_vae_type: "vqgan"
 
 optimizer: {opt: adamW, lr: 2e-5, weight_decay: 0.01}
-schedular: {sched: linear, last_epoch: -1, epochs: 5, warmup_epochs: 1}
+schedular: {sched: linear, last_epoch: -1, epochs: 3, warmup_epochs: 1}
 
 
 

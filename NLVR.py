@@ -29,7 +29,7 @@ import utils
 from dataset import create_dataset, create_sampler, create_loader
 from scheduler import create_scheduler
 from optim import create_optimizer
-# from apex import amp
+from apex import amp
 
 def train(model, data_loader, optimizer, tokenizer, epoch, warmup_epochs, device, scheduler, config):
     model.train()  
@@ -42,8 +42,6 @@ def train(model, data_loader, optimizer, tokenizer, epoch, warmup_epochs, device
     print_freq = 50   
 
     for i,(image0, image1, text, targets) in enumerate(metric_logger.log_every(data_loader, print_freq, header)):
-        
-
         image0, image1, targets = image0.to(device), image1.to(device), targets.to(device)   
         
         text_inputs = tokenizer(text, padding='longest', return_tensors="pt").to(device)  
@@ -51,9 +49,9 @@ def train(model, data_loader, optimizer, tokenizer, epoch, warmup_epochs, device
         loss = model(image0, image1, text_inputs, targets=targets, train=True)    
         
         optimizer.zero_grad()
-        # with amp.scale_loss(loss, optimizer) as scaled_loss:
-        #     scaled_loss.backward()
-        loss.backward()
+        with amp.scale_loss(loss, optimizer) as scaled_loss:
+            scaled_loss.backward()
+        # loss.backward()
         optimizer.step()  
         scheduler.step()   
                
@@ -154,7 +152,7 @@ def main(args, config):
         print(msg)
   
     model_without_ddp = model
-    # model, optimizer = amp.initialize(model, optimizer, opt_level="O1")
+    model, optimizer = amp.initialize(model, optimizer, opt_level="O1")
 
     if args.distributed:
         model = torch.nn.parallel.DistributedDataParallel(model, device_ids=[args.gpu], find_unused_parameters=True)
@@ -191,7 +189,7 @@ def main(args, config):
                 'config': config,
                 'epoch': epoch,
             }
-            torch.save(save_obj, os.path.join(args.output_dir, 'checkpoint.pth')) 
+            torch.save(save_obj, os.path.join(args.output_dir, 'checkpoint_%02d.pth'%epoch)) 
             best = float(val_stats['acc'])
             best_epoch = epoch
             
@@ -199,7 +197,7 @@ def main(args, config):
                 f.write(json.dumps(log_stats) + "\n")
         
         dist.barrier()   
-      
+                
     total_time = time.time() - start_time
     total_time_str = str(datetime.timedelta(seconds=int(total_time)))
     print('Training time {}'.format(total_time_str)) 
@@ -214,8 +212,8 @@ if __name__ == '__main__':
     parser.add_argument('--config', default='./configs/NLVR.yaml')
     parser.add_argument('--checkpoint', default='') 
     parser.add_argument('--output_dir', default='output/NLVR')
-    parser.add_argument('--encoder', default='pretrained/bert-base-uncased')
-    parser.add_argument('--text_decoder', default='pretrained/bert-base-uncased')
+    parser.add_argument('--encoder', default='bert-base-uncased')
+    parser.add_argument('--text_decoder', default='bert-base-uncased')
     parser.add_argument('--device', default='cuda')
     parser.add_argument('--seed', default=42, type=int)
     parser.add_argument('--world_size', default=1, type=int, help='number of distributed processes')    

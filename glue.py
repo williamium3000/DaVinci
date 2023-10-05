@@ -37,7 +37,6 @@ import transformers
 from accelerate import Accelerator
 from accelerate.logging import get_logger
 from accelerate.utils import set_seed
-import accelerate
 from huggingface_hub import Repository
 from transformers import (
     AutoConfig,
@@ -223,9 +222,8 @@ def main():
     # Initialize the accelerator. We will let the accelerator handle device placement for us in this example.
     # If we're using tracking, we also need to initialize it here and it will by default pick up all supported trackers
     # in the environment
-    kwargs_handlers = [accelerate.DistributedDataParallelKwargs(find_unused_parameters=True), ]
     accelerator = (
-        Accelerator(log_with=args.report_to, logging_dir=args.output_dir, kwargs_handlers=kwargs_handlers) if args.with_tracking else Accelerator(kwargs_handlers=kwargs_handlers)
+        Accelerator(log_with=args.report_to, logging_dir=args.output_dir) if args.with_tracking else Accelerator()
     )
     # Make one log on every process with the configuration for debugging.
     logging.basicConfig(
@@ -264,7 +262,7 @@ def main():
     # In distributed training, the load_dataset function guarantee that only one local process can concurrently
     # download the dataset.
     if args.task_name is not None:
-        raw_datasets = datasets.load_dataset("cd/glue.py", args.task_name)
+        raw_datasets = datasets.load_dataset("glue", args.task_name)
     else:
         # Loading the dataset from local csv or json file.
         data_files = {}
@@ -304,8 +302,8 @@ def main():
     config = yaml.load(open('configs/GLUE.yaml', 'r'), Loader=yaml.Loader)
 
     # config = AutoConfig.from_pretrained(args.model_name_or_path, num_labels=num_labels, finetuning_task=args.task_name)
-    tokenizer = BertTokenizer.from_pretrained('pretrained/bert-base-uncased', bos_token='[CLS]', eos_token='[SEP]', add_single_sep=False)
-    model = DaVinciGLUE(config=config, encoder='pretrained/bert-base-uncased', tokenizer=tokenizer,num_labels=num_labels)
+    tokenizer = BertTokenizer.from_pretrained('bert-base-uncased', bos_token='[CLS]', eos_token='[SEP]', add_single_sep=False)
+    model = DaVinciGLUE(config=config, encoder='bert-base-uncased', tokenizer=tokenizer,num_labels=num_labels)
 
     if args.model_name_or_path:    
         checkpoint = torch.load(args.model_name_or_path, map_location='cpu') 

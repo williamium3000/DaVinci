@@ -30,15 +30,14 @@ from dataset import create_dataset, create_sampler, create_loader, vqa_collate_f
 
 from scheduler import create_scheduler
 from optim import create_optimizer
-# from apex import amp
-from torch.cuda.amp import autocast, GradScaler
+from apex import amp
 
 root_dir = Path(__file__).parent.absolute()
 model_dir = root_dir / 'models'
 sys.path.insert(0, str(root_dir))
 sys.path.insert(0, str(model_dir))
 
-def train(model, data_loader, optimizer, tokenizer, epoch, warmup_epochs, device, scheduler, config, scalar, clip_grad_norm):
+def train(model, data_loader, optimizer, tokenizer, epoch, warmup_epochs, device, scheduler, config):
     model.train()  
     
     metric_logger = utils.MetricLogger(delimiter="  ")
@@ -49,40 +48,20 @@ def train(model, data_loader, optimizer, tokenizer, epoch, warmup_epochs, device
     print_freq = 50    
     
     for i,(image, question, answer, weights, question_id, n) in enumerate(metric_logger.log_every(data_loader, print_freq, header)):
-        with autocast(enabled=scalar is not None):
-            image, weights = image.to(device,non_blocking=True), weights.to(device,non_blocking=True)      
-            question_input = tokenizer(question, padding='longest', truncation=True, max_length=25, return_tensors="pt").to(device) 
-            answer_input = tokenizer(answer, padding='longest', return_tensors="pt").to(device) 
-        
-            loss = model(image, question_input, answer_input, train=True, k=n, weights=weights)        
-            loss_rec = loss
-        optimizer.zero_grad()
-        # with amp.scale_loss(loss, optimizer) as scaled_loss:
-        #     scaled_loss.backward()
-        # loss.backward()
-        # optimizer.step()  
-        if scalar is not None:
-            loss = scalar.scale(loss)
-            loss.backward()
-            
-            if clip_grad_norm is not None:
-                scalar.unscale_(optimizer)
-                torch.nn.utils.clip_grad_norm_(model.parameters(), clip_grad_norm)
-            
-            scalar.step(optimizer)
-            scalar.update()
-        else:
+        image, weights = image.to(device,non_blocking=True), weights.to(device,non_blocking=True)      
+        question_input = tokenizer(question, padding='longest', truncation=True, max_length=25, return_tensors="pt").to(device) 
+        answer_input = tokenizer(answer, padding='longest', return_tensors="pt").to(device) 
     
-            loss.backward()
+        loss = model(image, question_input, answer_input, train=True, k=n, weights=weights)        
         
-            if clip_grad_norm is not None:
-                torch.nn.utils.clip_grad_norm_(model.parameters(), clip_grad_norm)
-                
-            optimizer.step() 
-            
+        optimizer.zero_grad()
+        with amp.scale_loss(loss, optimizer) as scaled_loss:
+            scaled_loss.backward()
+        # loss.backward()
+        optimizer.step()  
         scheduler.step()   
         
-        metric_logger.update(loss=loss_rec.item())
+        metric_logger.update(loss=loss.item())
         metric_logger.update(lr=optimizer.param_groups[0]["lr"])
                
     # gather the stats from all processes
@@ -193,17 +172,12 @@ def main(args, config):
         
     model_without_ddp = model
 
-    # model, optimizer = amp.initialize(model, optimizer, opt_level="O1") # 这里是“欧一”，不是“零一”
+    model, optimizer = amp.initialize(model, optimizer, opt_level="O1") # 这里是“欧一”，不是“零一”
     if args.distributed:
         model = torch.nn.parallel.DistributedDataParallel(model, device_ids=[args.gpu], find_unused_parameters=True)
         model_without_ddp = model.module    
     
-    if args.amp:
-        print("using fp16...")
-        scalar = GradScaler()
-    else:
-        scalar = None
-        
+    
     print("Start training")
     start_time = time.time()
 
@@ -213,7 +187,7 @@ def main(args, config):
             if args.distributed:
                 train_loader.sampler.set_epoch(epoch)
 
-            train_stats = train(model, train_loader, optimizer, tokenizer, epoch, warmup_epochs, device, lr_scheduler, config, scalar, args.clip_grad_norm)
+            train_stats = train(model, train_loader, optimizer, tokenizer, epoch, warmup_epochs, device, lr_scheduler, config)
 
             vqa_test_result = test(model, test_loader, tokenizer, device, config)
             result_file = save_result(vqa_test_result, args.result_dir, 'vqa_test_result_epoch%d'%epoch)
@@ -248,16 +222,14 @@ if __name__ == '__main__':
     parser.add_argument('--checkpoint', default='') 
     parser.add_argument('--output_dir', default='output/vqa')
     parser.add_argument('--evaluate', action='store_true')    
-    parser.add_argument('--encoder', default='pretrained/bert-base-uncased')
-    parser.add_argument('--text_decoder', default='pretrained/bert-base-uncased')
+    parser.add_argument('--encoder', default='bert-base-uncased')
+    parser.add_argument('--text_decoder', default='bert-base-uncased')
     parser.add_argument('--device', default='cuda')
     parser.add_argument('--seed', default=42, type=int)
     parser.add_argument('--world_size', default=1, type=int, help='number of distributed processes')    
     parser.add_argument('--dist_url', default='env://', help='url used to set up distributed training')
     parser.add_argument('--distributed', default=True, type=bool)
     parser.add_argument('--override_cfg', default="", type=str, help="Use ; to separate keys")
-    parser.add_argument('--amp', action="store_true")
-    parser.add_argument('--clip-grad-norm', default=None, type=float)
     args = parser.parse_args()
 
     # currently support the override of params at max depth 2

@@ -107,8 +107,6 @@ class DaVinci(nn.Module):
                 self.d_vae = dalle_utils.create_d_vae(
                     weight_path=config["discrete_vae_weight_path"], d_vae_type=config["discrete_vae_type"],
                     device=device, image_size=config["second_input_size"])
-                for param in self.d_vae.parameters():
-                    param.requires_grad = False
 
         if config["init_decoder"]:
             self.text_decoder = BertLMHeadModel.from_pretrained(text_decoder, config=self.config_decoder, label_smoothing=self.label_smoothing)
@@ -138,9 +136,8 @@ class DaVinci(nn.Module):
                                             return_dict = True)    
 
         encoder_states = encoder_output.last_hidden_state                
-        
-        if use_dalle:
 
+        if use_dalle:
             # calculate loss_suffix_text_generation
             loss, logits = self.decode_forward(gen_text.input_ids, encoder_states, encoder_attns, gen_text.attention_mask, train, *args, **kwargs)
                 

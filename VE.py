@@ -29,11 +29,10 @@ import utils
 from dataset import create_dataset, create_sampler, create_loader
 from scheduler import create_scheduler
 from optim import create_optimizer
-from torch.cuda.amp import autocast, GradScaler
-# from apex import amp
+from apex import amp
 
 
-def train(model, data_loader, optimizer, tokenizer, epoch, warmup_epochs, device, scheduler, config, scalar):
+def train(model, data_loader, optimizer, tokenizer, epoch, warmup_epochs, device, scheduler, config):
     model.train()  
     
     metric_logger = utils.MetricLogger(delimiter="  ")
@@ -42,29 +41,23 @@ def train(model, data_loader, optimizer, tokenizer, epoch, warmup_epochs, device
 
     header = 'Train Epoch: [{}]'.format(epoch)
     print_freq = 50   
+    step_size = 100
  
     for i,(images, text, targets) in enumerate(metric_logger.log_every(data_loader, print_freq, header)):
+    
+        images, targets = images.to(device,non_blocking=True), targets.to(device,non_blocking=True)
+        text_inputs = tokenizer(text, padding='longest', return_tensors="pt").to(device) 
+        loss = model(images, text_inputs, targets=targets, train=True)    
         
-        with autocast(enabled=scalar is not None):
-            images, targets = images.to(device,non_blocking=True), targets.to(device,non_blocking=True)
-            text_inputs = tokenizer(text, padding='longest', return_tensors="pt").to(device) 
-            loss = model(images, text_inputs, targets=targets, train=True)    
-            loss_rec = loss
         optimizer.zero_grad()
-        if scalar is not None:
-            loss = scalar.scale(loss)
-            loss.backward()
-            scalar.step(optimizer)
-            scalar.update()
-        else:
-            
-            loss.backward()
-            optimizer.step()  
-        
+        with amp.scale_loss(loss, optimizer) as scaled_loss:
+            scaled_loss.backward()
+        # loss.backward()
+        optimizer.step()  
         scheduler.step()      
                
         metric_logger.update(lr=optimizer.param_groups[0]["lr"])
-        metric_logger.update(loss=loss_rec.item())   
+        metric_logger.update(loss=loss.item())   
         
     # gather the stats from all processes
     metric_logger.synchronize_between_processes()
@@ -163,13 +156,9 @@ def main(args, config):
         print('load checkpoint from %s'%args.checkpoint)
         print(msg)
 
-    if args.amp:
-        scalar = GradScaler()
-    else:
-        scalar = None
-        
+
     model_without_ddp = model
-    # model, optimizer = amp.initialize(model, optimizer, opt_level="O1") # 这里是“欧一”，不是“零一”
+    model, optimizer = amp.initialize(model, optimizer, opt_level="O1") # 这里是“欧一”，不是“零一”
     if args.distributed:
         model = torch.nn.parallel.DistributedDataParallel(model, device_ids=[args.gpu], find_unused_parameters=True)
         model_without_ddp = model.module    
@@ -185,7 +174,7 @@ def main(args, config):
         if not args.evaluate:
             if args.distributed:
                 train_loader.sampler.set_epoch(epoch)
-            train_stats = train(model, train_loader, optimizer, tokenizer, epoch, warmup_epochs, device, lr_scheduler, config, scalar)  
+            train_stats = train(model, train_loader, optimizer, tokenizer, epoch, warmup_epochs, device, lr_scheduler, config)  
             
         val_stats = evaluate(model, val_loader, tokenizer, device, config, info="Validation")
         test_stats = evaluate(model, test_loader, tokenizer, device, config, info="Test")
@@ -239,8 +228,8 @@ if __name__ == '__main__':
     parser.add_argument('--config', default='./configs/VE.yaml')
     parser.add_argument('--checkpoint', default='')  
     parser.add_argument('--output_dir', default='output/VE')   
-    parser.add_argument('--encoder', default='pretrained/bert-base-uncased')
-    parser.add_argument('--text_decoder', default='pretrained/bert-base-uncased')
+    parser.add_argument('--encoder', default='bert-base-uncased')
+    parser.add_argument('--text_decoder', default='bert-base-uncased')
     parser.add_argument('--evaluate', action='store_true')    
     parser.add_argument('--device', default='cuda')
     parser.add_argument('--seed', default=12, type=int)
@@ -248,7 +237,6 @@ if __name__ == '__main__':
     parser.add_argument('--dist_url', default='env://', help='url used to set up distributed training')
     parser.add_argument('--distributed', default=True, type=bool)
     parser.add_argument('--override_cfg', default="", type=str, help="Use ; to separate keys")
-    parser.add_argument('--amp', action="store_true")
     args = parser.parse_args()
 
     config = yaml.load(open(args.config, 'r'), Loader=yaml.Loader)

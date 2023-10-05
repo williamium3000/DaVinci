@@ -258,8 +258,8 @@ class BertSelfAttention(nn.Module):
         heads = self.num_attention_heads
         self.heads = heads
         # parameter table of relative position bias
-        # self.relative_bias_table = nn.Parameter(
-        #     torch.zeros((2 * self.ih - 1) * (2 * self.iw - 1), heads))
+        self.relative_bias_table = nn.Parameter(
+            torch.zeros((2 * self.ih - 1) * (2 * self.iw - 1), heads))
 
         coords = torch.meshgrid((torch.arange(self.ih), torch.arange(self.iw)))
         coords = torch.flatten(torch.stack(coords), 1)
@@ -1275,7 +1275,7 @@ class BertLMHeadModel(BertPreTrainedModel):
             loss_fct = CrossEntropyLoss(label_smoothing=self.label_smoothing, reduction=reduction)
             lm_loss = loss_fct(shifted_prediction_scores.view(-1, self.config.vocab_size), labels.view(-1)) # tensor(10.4214)
             if reduction == 'none':
-                lm_loss = lm_loss.view(prediction_scores.size(0),-1).mean(1)
+                lm_loss = lm_loss.view(prediction_scores.size(0),-1).sum(1)
 
         if not return_dict:
             output = (prediction_scores,) + outputs[2:]
@@ -1289,6 +1289,7 @@ class BertLMHeadModel(BertPreTrainedModel):
             attentions=outputs.attentions,
             cross_attentions=outputs.cross_attentions,
         )
+
     def prepare_inputs_for_generation(self, input_ids, past=None, attention_mask=None, **model_kwargs):
         input_shape = input_ids.shape
         # if model is used as a decoder in encoder-decoder model, the decoder attention mask is created on the fly

@@ -116,7 +116,7 @@ parser.add_argument('-a', '--arch', metavar='ARCH', default='resnet50',
                     help='model architecture: ' +
                         ' | '.join(model_names) +
                         ' (default: resnet50)')
-parser.add_argument('-j', '--workers', default=12, type=int, metavar='N',
+parser.add_argument('-j', '--workers', default=32, type=int, metavar='N',
                     help='number of data loading workers (default: 32)')
 # parser.add_argument('--epochs', default=100, type=int, metavar='N',
 #                     help='number of total epochs to run')
@@ -161,10 +161,9 @@ parser.add_argument('--multiprocessing-distributed', action='store_true',
 
 parser.add_argument('--pretrained', default='./pretrain_coco_vg_6490601_20220429-004728/model_state_epoch_38.th', type=str,
                     help='path to moco pretrained checkpoint')
-parser.add_argument('--encoder', default='pretrained/bert-base-uncased')
-parser.add_argument('--text_decoder', default='pretrained/bert-base-uncased')
+parser.add_argument('--encoder', default='bert-base-uncased')
+parser.add_argument('--text_decoder', default='bert-base-uncased')
 parser.add_argument('--config', default='./configs/linear_probe.yaml') 
-parser.add_argument('--output_dir') 
 parser.add_argument('--override_cfg', default="", type=str, help="Use ; to separate keys")
 
 best_acc1 = 0
@@ -466,7 +465,7 @@ def main_worker(gpu, ngpus_per_node, args, config):
                 'best_acc1': best_acc1,
                 'optimizer' : optimizer.state_dict(),
                 # 'scheduler': scheduler.state_dict(),
-            }, is_best, os.path.join(args.output_dir, "checkpoint.pth.tar"))
+            }, is_best)
         print("best_acc1 = ", best_acc1)
 
 def train(train_loader, model, criterion, optimizer, scheduler, epoch, args, tokenizer):
@@ -573,7 +572,7 @@ def validate(val_loader, model, criterion, args, tokenizer):
 def save_checkpoint(state, is_best, filename='checkpoint.pth.tar'):
     torch.save(state, filename)
     if is_best:
-        shutil.copyfile(filename, os.path.join(os.path.dirname(filename), 'model_best.pth.tar'))
+        shutil.copyfile(filename, 'model_best.pth.tar')
 
 
 class AverageMeter(object):
